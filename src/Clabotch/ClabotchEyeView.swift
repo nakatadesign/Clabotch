@@ -114,56 +114,62 @@ final class ClabotchEyeView: NSView {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let dot = min(bounds.width / Self.canvasWidth, bounds.height / Self.canvasHeight)
 
+        // キャンバスを bounds 中央に配置するオフセット
+        let ox = (bounds.width  - Self.canvasWidth  * dot) / 2
+        let oy = (bounds.height - Self.canvasHeight * dot) / 2
+
         // 背景クリア（メニューバーは透明）
         ctx.clear(bounds)
 
         // 顔（16×12 at (3,1)）
-        drawFace(ctx: ctx, dot: dot)
+        drawFace(ctx: ctx, dot: dot, ox: ox, oy: oy)
 
         if isBlinkClosed {
             // まばたき / sleeping: 閉じ目（frame06）
-            drawBlinkClosed(ctx: ctx, dot: dot)
+            drawBlinkClosed(ctx: ctx, dot: dot, ox: ox, oy: oy)
         } else if showErrorX {
             // エラー: ×マーク（frame07）
-            drawEyeSockets(ctx: ctx, dot: dot)
-            drawErrorX(ctx: ctx, dot: dot)
+            drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy)
+            drawErrorX(ctx: ctx, dot: dot, ox: ox, oy: oy)
         } else if showSurprise {
             // 驚き: 中央瞳（frame08）
-            drawEyeSockets(ctx: ctx, dot: dot)
-            drawPupils(ctx: ctx, dot: dot, frame: .f01_center)
+            drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy)
+            drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, frame: .f01_center)
         } else {
             // 通常: 目 + 瞳
-            drawEyeSockets(ctx: ctx, dot: dot)
-            drawPupils(ctx: ctx, dot: dot, frame: gazeFrame)
+            drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy)
+            drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, frame: gazeFrame)
         }
     }
 
     // MARK: - 描画ヘルパー
 
+    /// dot 単位のピクセル描画。ox/oy は中央配置オフセット。
     private func px(_ ctx: CGContext, _ x: CGFloat, _ y: CGFloat,
-                    _ w: CGFloat, _ h: CGFloat, _ dot: CGFloat) {
+                    _ w: CGFloat, _ h: CGFloat, _ dot: CGFloat,
+                    ox: CGFloat = 0, oy: CGFloat = 0) {
         // v11 §8: dot 単位のピクセル描画
         // NSView は左下原点なので Y を反転する
         let flippedY = Self.canvasHeight - y - h
-        ctx.fill(CGRect(x: x * dot, y: flippedY * dot, width: w * dot, height: h * dot))
+        ctx.fill(CGRect(x: x * dot + ox, y: flippedY * dot + oy, width: w * dot, height: h * dot))
     }
 
-    private func drawFace(ctx: CGContext, dot: CGFloat) {
+    private func drawFace(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat) {
         ctx.setFillColor(faceColor.cgColor)
         // face: 16×12 at (3, 1)
-        px(ctx, 3, 1, 16, 12, dot)
+        px(ctx, 3, 1, 16, 12, dot, ox: ox, oy: oy)
     }
 
-    private func drawEyeSockets(ctx: CGContext, dot: CGFloat) {
+    private func drawEyeSockets(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat) {
         ctx.setFillColor(Palette.eyeWhite.cgColor)
         // 左目ソケット: 4×8 at (5, 3)
-        px(ctx, 5, 3, 4, 8, dot)
+        px(ctx, 5, 3, 4, 8, dot, ox: ox, oy: oy)
         // 右目ソケット: 4×8 at (13, 3)
-        px(ctx, 13, 3, 4, 8, dot)
+        px(ctx, 13, 3, 4, 8, dot, ox: ox, oy: oy)
     }
 
     /// v11 §4, §8: フレーム丸ごと切り替え（座標計算禁止）
-    private func drawPupils(ctx: CGContext, dot: CGFloat, frame: GazeFrame) {
+    private func drawPupils(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, frame: GazeFrame) {
         ctx.setFillColor(Palette.pupil.cgColor)
 
         // 左目ソケット基点: (sx=5, sy=3)
@@ -179,30 +185,30 @@ final class ClabotchEyeView: NSView {
         }()
 
         // 瞳: 2×6
-        px(ctx, lx, ly, 2, 6, dot)
-        px(ctx, rx, ry, 2, 6, dot)
+        px(ctx, lx, ly, 2, 6, dot, ox: ox, oy: oy)
+        px(ctx, rx, ry, 2, 6, dot, ox: ox, oy: oy)
     }
 
-    private func drawBlinkClosed(ctx: CGContext, dot: CGFloat) {
+    private func drawBlinkClosed(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat) {
         // frame06: 閉じ目 — 目のソケット領域に横線を描画
         ctx.setFillColor(Palette.pupil.cgColor)
         // 左目: 4×1 at (5, 7) — ソケットの中央付近
-        px(ctx, 5, 7, 4, 1, dot)
+        px(ctx, 5, 7, 4, 1, dot, ox: ox, oy: oy)
         // 右目: 4×1 at (13, 7) — ソケットの中央付近
-        px(ctx, 13, 7, 4, 1, dot)
+        px(ctx, 13, 7, 4, 1, dot, ox: ox, oy: oy)
     }
 
-    private func drawErrorX(ctx: CGContext, dot: CGFloat) {
+    private func drawErrorX(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat) {
         ctx.setFillColor(Palette.errorX.cgColor)
         // 左目に × — 対角線を2×2ドットで表現
-        px(ctx, 5, 4, 2, 2, dot)
-        px(ctx, 7, 6, 2, 2, dot)
-        px(ctx, 5, 6, 2, 2, dot)
-        px(ctx, 7, 4, 2, 2, dot)
+        px(ctx, 5, 4, 2, 2, dot, ox: ox, oy: oy)
+        px(ctx, 7, 6, 2, 2, dot, ox: ox, oy: oy)
+        px(ctx, 5, 6, 2, 2, dot, ox: ox, oy: oy)
+        px(ctx, 7, 4, 2, 2, dot, ox: ox, oy: oy)
         // 右目に ×
-        px(ctx, 13, 4, 2, 2, dot)
-        px(ctx, 15, 6, 2, 2, dot)
-        px(ctx, 13, 6, 2, 2, dot)
-        px(ctx, 15, 4, 2, 2, dot)
+        px(ctx, 13, 4, 2, 2, dot, ox: ox, oy: oy)
+        px(ctx, 15, 6, 2, 2, dot, ox: ox, oy: oy)
+        px(ctx, 13, 6, 2, 2, dot, ox: ox, oy: oy)
+        px(ctx, 15, 4, 2, 2, dot, ox: ox, oy: oy)
     }
 }
