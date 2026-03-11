@@ -80,6 +80,25 @@ final class AppDelegateCoordinatorTests: XCTestCase {
         XCTAssertNil(CoordinatorBinder.bubbleText(for: .sleeping))
     }
 
+    // MARK: - phaseName（回帰テスト: associated value がログに漏れないことを保証）
+
+    func testPhaseNameReturnsOnlyCaseName() {
+        XCTAssertEqual(CoordinatorBinder.phaseName(.idle), "idle")
+        XCTAssertEqual(CoordinatorBinder.phaseName(.thinking), "thinking")
+        XCTAssertEqual(CoordinatorBinder.phaseName(.working(toolName: "Bash")), "working")
+        XCTAssertEqual(CoordinatorBinder.phaseName(.done(elapsedMs: 99999)), "done")
+        XCTAssertEqual(CoordinatorBinder.phaseName(.error(toolName: "Read", message: "秘密の情報")), "error")
+        XCTAssertEqual(CoordinatorBinder.phaseName(.sleeping), "sleeping")
+    }
+
+    func testPhaseNameDoesNotLeakErrorMessage() {
+        let name = CoordinatorBinder.phaseName(.error(toolName: "Bash", message: "token=abc123"))
+        XCTAssertFalse(name.contains("token"))
+        XCTAssertFalse(name.contains("abc123"))
+        XCTAssertFalse(name.contains("Bash"))
+        XCTAssertEqual(name, "error")
+    }
+
     // MARK: - formatElapsedTime
 
     func testFormatElapsedTime() {
