@@ -2,7 +2,7 @@ import AppKit
 
 /// 吹き出しウィンドウ。メニューバーの下に表示し、自動消去する。
 /// v11 §5, §6 準拠。
-final class BubbleWindow {
+final class BubbleWindow: BubblePresenting {
 
     private(set) var window: NSWindow?
     private(set) var dismissTimer: Timer?

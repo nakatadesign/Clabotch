@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var eyeView: ClabotchEyeView?
     private let bubbleWindow = BubbleWindow()
     private let ephemeralBubbleWindow = BubbleWindow()
+    private var binder: CoordinatorBinder?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // メニューバー設定（22px 固定幅）
@@ -42,50 +43,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return CGPoint(x: frameOnScreen.midX, y: frameOnScreen.midY)
         }
 
-        // GazeController → ClabotchEyeView
-        gazeController.onGazeFrameChanged = { [weak self] frame in
-            self?.eyeView?.setGazeFrame(frame)
-        }
-
-        // BlinkController → ClabotchEyeView
-        blinkController.onBlink = { [weak self] in
-            self?.eyeView?.triggerBlink()
-        }
-
-        // StateMachine コールバック（Coordinator 役）
-        stateMachine.onPhaseChanged = { [weak self] phase in
-            guard let self else { return }
-            os_log(.info, "フェーズ変更: %{public}@", String(describing: phase))
-
-            // GazeController: phase → override 変換
-            let override = Self.gazeOverride(for: phase)
-            self.gazeController.setOverride(override)
-
-            // BlinkController: phase → enabled 変換
-            let blinkEnabled = Self.isBlinkEnabled(for: phase)
-            self.blinkController.setBlinking(enabled: blinkEnabled)
-
-            // ClabotchEyeView: phase → 外見変更
-            self.eyeView?.setPhaseAppearance(phase: phase)
-
-            // BubbleWindow: phase → 吹き出し表示
-            if let text = Self.bubbleText(for: phase) {
-                if let anchor = self.statusItemAnchor() {
-                    self.bubbleWindow.show(text: text, anchor: anchor)
-                }
-            } else {
-                self.bubbleWindow.dismiss()
-            }
-        }
-
-        stateMachine.onEphemeralDone = { [weak self] elapsedMs in
-            guard let self else { return }
-            let text = Self.formatElapsedTime(elapsedMs)
-            let display = "別セッション完了 (\(text))"
-            if let anchor = self.statusItemAnchor() {
-                self.ephemeralBubbleWindow.show(text: display, anchor: anchor, duration: 2.0)
-            }
-        }
+        // Coordinator 結線（CoordinatorBinder に委譲）
+        binder = CoordinatorBinder(
+            stateMachine: stateMachine,
+            gazeController: gazeController,
+            blinkController: blinkController,
+            eyeView: eyeView,
+            activeBubble: bubbleWindow,
+            ephemeralBubble: ephemeralBubbleWindow,
+            anchorProvider: { [weak self] in self?.statusItemAnchor() }
+        )
+        binder?.bind()
 
         // HookServer 初期化・起動
         let tmpDir = NSTemporaryDirectory().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -125,62 +93,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
-    }
-
-    // MARK: - Phase → Override 変換（v11 §11.5 対応表準拠）
-
-    static func gazeOverride(for phase: MascotPhase) -> GazeOverride {
-        switch phase {
-        case .idle:     return .fixed(frame: .f02_rightDown, reason: .mascotStateOverride)
-        case .thinking: return .none
-        case .working:  return .none
-        case .done:     return .fixed(frame: .f02_rightDown, reason: .mascotStateOverride)
-        case .error:    return .fixed(frame: .f01_center, reason: .mascotStateOverride)
-        case .sleeping: return .fixed(frame: .f01_center, reason: .mascotStateOverride)
-        }
-    }
-
-    // MARK: - Phase → Blink 変換（v11 §6 準拠）
-
-    static func isBlinkEnabled(for phase: MascotPhase) -> Bool {
-        switch phase {
-        case .idle, .thinking, .working, .done: return true
-        case .error, .sleeping:                 return false
-        }
-    }
-
-    // MARK: - Phase → 吹き出し文言（v11 §6 準拠）
-
-    static func bubbleText(for phase: MascotPhase) -> String? {
-        switch phase {
-        case .thinking:
-            return "考えてます..."
-        case .working(let toolName):
-            return "\(toolName) 実行中..."
-        case .done(let elapsedMs):
-            if elapsedMs > 0 {
-                return "完了！(\(formatElapsedTime(elapsedMs)))"
-            } else {
-                return "完了！"
-            }
-        case .error:
-            return "エラーが出ました…"  // v11 §6 固定文言。詳細 error_message は v1.0+ (§13.6)
-        case .idle, .sleeping:
-            return nil
-        }
-    }
-
-    // MARK: - ヘルパー
-
-    static func formatElapsedTime(_ ms: Int) -> String {
-        let totalSeconds = ms / 1000
-        let minutes = totalSeconds / 60
-        let seconds = totalSeconds % 60
-        if minutes > 0 {
-            return "\(minutes)分\(seconds)秒"
-        } else {
-            return "\(seconds)秒"
-        }
     }
 
     private func statusItemAnchor() -> CGPoint? {
