@@ -239,15 +239,15 @@ final class GazeControllerTerminalTests: XCTestCase {
         wait(for: [exp], timeout: 1.0)
     }
 
-    func testUnsupportedTerminalFixed() {
-        mockWorkspace.bundleIdentifier = "dev.warp.desktop"
+    func testWarpSupportedTerminalTracking() {
+        mockWorkspace.bundleIdentifier = "dev.warp.Warp-Stable"
         mockWorkspace.pid = 1234
+        mockAX.terminalCenter = CGPoint(x: 600, y: 500)
 
         sut.startPolling()
-        let exp = expectation(description: "unsupportedTerminal")
+        let exp = expectation(description: "Warp tracking")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertEqual(self.sut.mode, .fixed(.f02_rightDown, reason: .unsupportedTerminal))
-            XCTAssertEqual(self.sut.gazeFrame, .f02_rightDown)
+            XCTAssertEqual(self.sut.mode, .tracking)
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)

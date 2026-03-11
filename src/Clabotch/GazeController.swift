@@ -35,13 +35,13 @@ final class GazeController {
     private let supportedBundles: Set<String> = [
         "com.apple.Terminal",
         "com.googlecode.iterm2",
-        "org.wezfurlong.wezterm"
+        "org.wezfurlong.wezterm",
+        "dev.warp.Warp-Stable"
     ]
 
     /// AX 属性ダンプ確認後に supportedBundles へ昇格させる候補
-    private let tentativeBundles: Set<String> = [
-        "dev.warp.desktop"
-    ]
+    /// Warp は計画 009 で AX 属性ダンプ検証済み → supportedBundles に昇格済み
+    private let tentativeBundles: Set<String> = []
 
     // MARK: - UserDefaults キー
 

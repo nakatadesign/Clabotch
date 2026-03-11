@@ -3,10 +3,9 @@
 ## 1. セッション概要
 
 - **日時**: 2026-03-12（JST）
-- **作業目的**: 計画 007 実装 + 計画 008 バグ修正
+- **作業目的**: 計画 007〜009 実装
 - **全体進捗**:
-  - 完了: 計画 002, 003, 004, 005, 006, 007, 008
-  - 未着手: AX tracking（Warp）
+  - 完了: 計画 002, 003, 004, 005, 006, 007, 008, 009
   - 総テスト: **195 件**（194 passed, 1 skipped）
 
 ---
@@ -22,30 +21,31 @@ review-loop job `plan007-impl` で 2 ラウンド実施し done 達成。
 | Round 1 | B | 初期実装。os_log に error message 漏洩、BubbleSpy.lastText dismiss 後残存 |
 | Round 2 | B | os_log 秘匿（phaseName）、BubbleSpy dismiss クリア、単体テスト +4 件 → **done** |
 
-#### 新規ファイル
+### 2b. 計画 008 — HookServer 起動失敗時の半初期化修正
 
-| ファイル | 役割 |
-|----------|------|
-| `src/Clabotch/BubblePresenting.swift` | 吹き出し表示プロトコル |
-| `src/Clabotch/CoordinatorBinder.swift` | AppDelegate から抽出した結線ロジック |
-| `src/ClabotchTests/BubbleSpy.swift` | BubblePresenting 準拠の test double |
-| `src/ClabotchTests/CoordinatorIntegrationTests.swift` | 統合テスト 20 件 |
+Codex 計画レビュー A + 実装レビュー A を取得。
+
+### 2c. 計画 009 — Warp AX 属性ダンプ + 昇格判断
+
+AX 属性ダンプの結果 **COMPATIBLE** と判定。Warp を `supportedBundles` に昇格。
+
+| 項目 | 結果 |
+|------|------|
+| BundleIdentifier | `dev.warp.Warp-Stable`（設計書の `dev.warp.desktop` と異なる） |
+| Warp バージョン | 0.2026.03.04.08.20.02 |
+| kAXWindows | 成功 |
+| kAXPosition | 成功（1408.0, 367.0） |
+| kAXSize | 成功（1024.0 x 768.0） |
+| 判定 | COMPATIBLE — supportedBundles 昇格 |
 
 #### 変更ファイル
 
 | ファイル | 変更内容 |
 |----------|---------|
-| `src/Clabotch/BubbleWindow.swift` | BubblePresenting 準拠宣言追加 |
-| `src/Clabotch/AppDelegate.swift` | CoordinatorBinder 委譲 + static メソッド移設 |
-| `src/ClabotchTests/AppDelegateCoordinatorTests.swift` | 参照更新 + マッピングテスト追加 |
-
-### 2b. 計画 008 — HookServer 起動失敗時の半初期化修正
-
-Codex 計画レビュー A + 実装レビュー A を取得。
-
-| ファイル | 変更内容 |
-|----------|---------|
-| `src/Clabotch/AppDelegate.swift` | `stateMachine.start()` / `gazeController.startPolling()` を do-catch 外に移動。`.alreadyRunning` catch に `return` 追加。ログレベル `.error` → `.fault` に昇格 |
+| `src/Clabotch/GazeController.swift` | `tentativeBundles` を空にし、`supportedBundles` に `dev.warp.Warp-Stable` を追加 |
+| `src/ClabotchTests/GazeControllerTests.swift` | Warp テストを `.unsupportedTerminal` → `.tracking` に変更 |
+| `docs/design/patches/patch_009_warp_ax_investigation.md` | 調査結果の記録 |
+| `tests/ax_dump.swift` | AX 属性ダンプスクリプト（調査ツール） |
 
 ---
 
@@ -61,14 +61,18 @@ Codex 計画レビュー A + 実装レビュー A を取得。
 
 - UI 初期化（StateMachine/GazeController）を HookServer の成否から独立させた
 - `.alreadyRunning` のみ terminate。その他のエラーではマスコットとして最低限動作を継続
-- terminate 後の `return` で、非同期 terminate と後続処理のレースを防止
+
+### 3c. Warp BundleIdentifier の不一致（計画 009）
+
+- 設計書 v11 §11.5 では `dev.warp.desktop` だが、実機の Warp Stable は `dev.warp.Warp-Stable`
+- 旧バージョンまたは別リリースチャンネルの可能性。Homebrew Cask の Stable のみ対応
+- 逸脱を `docs/design/patches/patch_009_warp_ax_investigation.md` に記録済み
 
 ---
 
 ## 4. 次のステップ（優先度順）
 
 ### 高優先度
-- Warp AX 属性ダンプ → tentativeBundles 昇格判断
 - main ブランチの origin への push
 
 ### 中優先度
@@ -96,6 +100,6 @@ Codex 計画レビュー A + 実装レビュー A を取得。
 |--------|------|
 | HANDOVER.md.bak がリポジトリルートに残存 | バックアップファイル。コミット不要。必要なら削除 |
 | main ブランチが origin より先行 | push していない。次セッションで push 判断 |
-| Warp の AX 属性（GazeController tentativeBundles） | AX 属性ダンプ後に昇格判断 |
 | BubbleWindow show() headless テスト不可 | テスト seam 導入で対応予定 |
 | activeBubble/ephemeralBubble 同一型リスク | init パラメータ名で軽減。型安全ではなく手動レビュー依存 |
+| Warp の BundleIdentifier 変更リスク | 将来のバージョンで `dev.warp.Warp-Stable` が変わる可能性 |
