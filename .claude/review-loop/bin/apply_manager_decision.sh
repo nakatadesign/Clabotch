@@ -9,6 +9,8 @@ decision=""
 reason=""
 from_judge=""
 force="0"
+spot_checked="0"
+record_spot_check_only="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -32,6 +34,14 @@ while [[ $# -gt 0 ]]; do
       force="1"
       shift
       ;;
+    --spot-checked)
+      spot_checked="1"
+      shift
+      ;;
+    --record-spot-check)
+      record_spot_check_only="1"
+      shift
+      ;;
     *)
       die "未対応の引数です: $1"
       ;;
@@ -39,6 +49,40 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$job_name" ]] || die "--job-name を指定してください"
+
+# --record-spot-check モード: spot_check を state.json に記録して終了
+if [[ "$record_spot_check_only" == "1" ]]; then
+  ensure_job_exists "$job_name"
+
+  round_number="$(current_round "$job_name")"
+  [[ "$round_number" -gt 0 ]] || die "まだラウンドが開始されていません"
+  target_round_dir="$(round_dir "$job_name" "$round_number")"
+
+  judge_path="$target_round_dir/judge.json"
+  [[ -f "$judge_path" ]] || die "judge.json が見つかりません"
+
+  checked_files="$(jq '.must_fix // []' "$judge_path")"
+
+  spot_check_record="$(jq -nc \
+    --arg checked_at "$(timestamp)" \
+    --argjson round "$round_number" \
+    --argjson checked_files "$checked_files" \
+    '{checked_at: $checked_at, round: $round, checked_files: $checked_files}')"
+
+  state_tmp="$(mktemp)"
+  jq \
+    --arg updated_at "$(timestamp)" \
+    --argjson manager_spot_check "$spot_check_record" \
+    '.manager_spot_check = $manager_spot_check
+     | .updated_at = $updated_at' \
+    "$(state_file "$job_name")" > "$state_tmp"
+  mv "$state_tmp" "$(state_file "$job_name")"
+
+  append_event "$job_name" "manager-spot-check" "round $round_number spot check recorded: $(printf '%s' "$checked_files" | jq -c .)"
+  echo "[review-loop] spot check recorded."
+  exit 0
+fi
+
 [[ -n "$decision" ]] || die "--decision を指定してください"
 ensure_job_exists "$job_name"
 
@@ -110,10 +154,18 @@ if [[ "$decision" == "done" ]]; then
     gate_failures+=("judge recommendation が done ではありません: $judge_recommendation")
   fi
 
-  # 条件4: spot_check_required == true
-  spot_check="$(jq -r '.spot_check_required // false' "$judge_path")"
-  if [[ "$spot_check" != "true" ]]; then
-    gate_failures+=("spot_check_required が true ではありません")
+  # 条件4: manager_spot_check が state.json に事前記録されていること
+  existing_spot_check="$(jq -r '.manager_spot_check // null' "$(state_file "$job_name")")"
+  if [[ "$existing_spot_check" == "null" ]]; then
+    gate_failures+=("manager_spot_check が state.json に記録されていません。先に --record-spot-check を実行してください")
+  fi
+
+  # 条件4b: manager_spot_check の round が current round と一致すること
+  if [[ "$existing_spot_check" != "null" ]]; then
+    spot_check_round="$(printf '%s' "$existing_spot_check" | jq -r '.round // empty')"
+    if [[ "$spot_check_round" != "$round_number" ]]; then
+      gate_failures+=("manager_spot_check の round ($spot_check_round) が current round ($round_number) と一致しません。再度 --record-spot-check を実行してください")
+    fi
   fi
 
   if [[ "${#gate_failures[@]}" -gt 0 ]]; then

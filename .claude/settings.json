@@ -4,7 +4,6 @@
   },
   "permissions": {
     "allow": [
-      "Bash(codex:*)",
       "Bash(swift build:*)",
       "Bash(swift test:*)",
       "Bash(xcodebuild:*)",

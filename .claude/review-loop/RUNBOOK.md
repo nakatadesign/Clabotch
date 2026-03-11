@@ -110,10 +110,11 @@ Claude は各 tick で次を行います。
    - `record_claude_round.sh` を実行する
    - `run_reviewer.sh` を実行する
    - `run_judge.sh` を実行する
-   - `apply_manager_decision.sh` で最終決定を確定する
+   - `run_judge.sh` 実行後は status が `manager_review` になる
+   - Manager エージェント（`.claude/agents/manager.md`）に処理を委譲し、final decision を確定させる
 5. `reviewing` で止まっていたら reviewer から再開する
 6. `judging` で止まっていたら judge から再開する
-7. `manager_review` で止まっていたら `apply_manager_decision.sh` から再開する
+7. `manager_review` で止まっていたら Manager エージェント（`.claude/agents/manager.md`）に委譲し、final decision を確定させる
 
 ## 人が見るコマンド
 

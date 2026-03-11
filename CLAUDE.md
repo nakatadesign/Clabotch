@@ -49,10 +49,11 @@ active job がある場合、各 tick で次を行う。
    - `.claude/review-loop/bin/record_claude_round.sh --job-name <active-job> ...` を実行する
    - `.claude/review-loop/bin/run_reviewer.sh --job-name <active-job>` を実行する
    - `.claude/review-loop/bin/run_judge.sh --job-name <active-job>` を実行する
-   - `.claude/review-loop/bin/apply_manager_decision.sh --job-name <active-job> --decision <fix|continue|done|human>` を実行する
+   - run_judge.sh 実行後は status が `manager_review` になる
+   - Manager エージェント（`.claude/agents/manager.md`）に処理を委譲し、final decision を確定させる
 5. `status=reviewing` で止まっている場合は `.claude/review-loop/bin/run_reviewer.sh --job-name <active-job>` から再開する
 6. `status=judging` で止まっている場合は `.claude/review-loop/bin/run_judge.sh --job-name <active-job>` から再開する
-7. `status=manager_review` で止まっている場合は `.claude/review-loop/bin/apply_manager_decision.sh --job-name <active-job> --decision <decision>` から再開する
+7. `status=manager_review` で止まっている場合は Manager エージェント（`.claude/agents/manager.md`）に委譲し、final decision を確定させる
 
 ### review-loop 実行ルール
 

@@ -125,6 +125,7 @@ jq \
   --argjson current_round "$next_round" \
   '.current_round = $current_round
    | .status = "reviewing"
+   | .manager_spot_check = null
    | .updated_at = $updated_at' \
   "$(state_file "$job_name")" > "$state_tmp"
 mv "$state_tmp" "$(state_file "$job_name")"
