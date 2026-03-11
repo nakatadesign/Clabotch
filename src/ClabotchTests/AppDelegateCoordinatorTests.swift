@@ -35,4 +35,38 @@ final class AppDelegateCoordinatorTests: XCTestCase {
         XCTAssertFalse(AppDelegate.isBlinkEnabled(for: .error(toolName: "test", message: nil)))
         XCTAssertFalse(AppDelegate.isBlinkEnabled(for: .sleeping))
     }
+
+    // MARK: - bubbleText(for:)
+
+    func testBubbleTextThinking() {
+        XCTAssertEqual(AppDelegate.bubbleText(for: .thinking), "考えてます...")
+    }
+
+    func testBubbleTextDoneWithTime() {
+        XCTAssertEqual(AppDelegate.bubbleText(for: .done(elapsedMs: 222000)), "完了！(3分42秒)")
+    }
+
+    func testBubbleTextDoneNoTime() {
+        XCTAssertEqual(AppDelegate.bubbleText(for: .done(elapsedMs: 0)), "完了！")
+    }
+
+    func testBubbleTextErrorFixedMessage() {
+        // v11 §6: error は固定文言。error_message は表示しない (§13.6)
+        XCTAssertEqual(AppDelegate.bubbleText(for: .error(toolName: "Bash", message: "some detail")), "エラーが出ました…")
+        XCTAssertEqual(AppDelegate.bubbleText(for: .error(toolName: "Bash", message: nil)), "エラーが出ました…")
+    }
+
+    func testBubbleTextIdleNil() {
+        XCTAssertNil(AppDelegate.bubbleText(for: .idle))
+        XCTAssertNil(AppDelegate.bubbleText(for: .sleeping))
+    }
+
+    // MARK: - formatElapsedTime
+
+    func testFormatElapsedTime() {
+        XCTAssertEqual(AppDelegate.formatElapsedTime(222000), "3分42秒")
+        XCTAssertEqual(AppDelegate.formatElapsedTime(5000), "5秒")
+        XCTAssertEqual(AppDelegate.formatElapsedTime(60000), "1分0秒")
+        XCTAssertEqual(AppDelegate.formatElapsedTime(0), "0秒")
+    }
 }

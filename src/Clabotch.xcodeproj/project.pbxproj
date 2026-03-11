@@ -9,21 +9,33 @@
 /* Begin PBXBuildFile section */
 		031195A51E4DEBCCCE79D315 /* ClabotchEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B07355B60F006A885B5E7A3 /* ClabotchEvent.swift */; };
 		05865EE9B15BE40CD15478B3 /* TestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE8769A4983A7A928F5B17BD /* TestHelpers.swift */; };
+		0CB9227D5E66E31C3F2E97ED /* MockProviders.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD17A2B7DC6C1976827DE887 /* MockProviders.swift */; };
 		0DAA12FDCC0C41D7165D1135 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7EE57E153DC91A088C8A04A /* AppDelegate.swift */; };
+		0FD047C1B96B55A730D81D10 /* BubbleWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3CC2C07B97752CF8C9EAB3 /* BubbleWindow.swift */; };
 		13E61BBE2C46EF2C2851235B /* ClabotchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1CFC51853BAEE81B0D77FC5 /* ClabotchApp.swift */; };
 		15521049195B7B05052C8B8A /* LineBufferedEventDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 223AA7DF7008B6A77962527B /* LineBufferedEventDecoder.swift */; };
+		1660A6857A7EB671F4C5076B /* ClabotchEyeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C99B10E5D8EC9D81419C6960 /* ClabotchEyeView.swift */; };
+		1B2007D899DDB7E3E5678143 /* ClabotchEyeViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22CC6A96972005D9565F0FA4 /* ClabotchEyeViewTests.swift */; };
 		2525C627DF6293B8078C3C25 /* LineBufferedEventDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C9269667AD0FB5009C260E8 /* LineBufferedEventDecoderTests.swift */; };
 		39A4AC62A387316608C45E9B /* HookServerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F9A12D39178E19E1B5C2D2C /* HookServerTests.swift */; };
 		3BA631CF26DB54E7FEF61ECE /* SocketOps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87EDB190B5315651857591EE /* SocketOps.swift */; };
 		3E9F399F6BBD8C9CDA19B22E /* MockSocketOps.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6AFF63313CAE4EFD697FFE3 /* MockSocketOps.swift */; };
+		4507BDCA95968FC5B5010A1C /* BlinkControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4476ECA689707A583A562D9D /* BlinkControllerTests.swift */; };
 		4733B842423CC2C183621E54 /* HookServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D641782D88ED126B539ECC /* HookServer.swift */; };
 		51E4DD78AA01757BCDBBBAF0 /* MascotPhase.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB06693ED6AB5DBC4E53A91D /* MascotPhase.swift */; };
+		5A73AA822128B508F58B2B27 /* GazeTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A076E8747B07F4A438A5A17B /* GazeTypes.swift */; };
 		62E754140E7D27FDE0ECB018 /* EventParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96A3EDC104C593DEBC49336D /* EventParser.swift */; };
+		642D258774FA843536B2D9DE /* AppDelegateCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E951BFD335706B02EB25141C /* AppDelegateCoordinatorTests.swift */; };
 		771BA242A93A8537221565C2 /* EventDeduplicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DACCB80479EEB2BBB2EF9272 /* EventDeduplicator.swift */; };
 		7AAEC3EEC1D954C2B9D57E17 /* StateMachineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84630FB49B993C3D7A6C40D5 /* StateMachineTests.swift */; };
+		85A036E57C9720D16E4C5522 /* GazeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7A0BEDE8BFCEAE3E5668F6B /* GazeController.swift */; };
+		86849EB52E3D4CA14F34B2B5 /* BubbleWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F312F0F7D2D7BC2D60314798 /* BubbleWindowTests.swift */; };
+		963EDF12B3BB10FBF2A48488 /* GazeControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F313BE981AA91C925B20DD /* GazeControllerTests.swift */; };
 		9A503A3DBB67ECDCAA8F8749 /* EventDeduplicatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA0E74B3EDD35A52A575C4AE /* EventDeduplicatorTests.swift */; };
 		B0D2CA13463CF37F54E89244 /* EventParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 608C9DD4F8FDEC404C5D6227 /* EventParserTests.swift */; };
 		CB1B63529809F1606FEED5D2 /* StateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE38EF9CB1A7C37FF460B40A /* StateMachine.swift */; };
+		CCF278A6F2E1FEE5F39A9FBF /* AXProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DCB9955406A6BDA3D525A4A /* AXProvider.swift */; };
+		FDF999A9C40E0550AAA18D1B /* BlinkController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 900A8C1103779FDB804969C9 /* BlinkController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,21 +52,33 @@
 		0C9269667AD0FB5009C260E8 /* LineBufferedEventDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineBufferedEventDecoderTests.swift; sourceTree = "<group>"; };
 		1B07355B60F006A885B5E7A3 /* ClabotchEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClabotchEvent.swift; sourceTree = "<group>"; };
 		223AA7DF7008B6A77962527B /* LineBufferedEventDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineBufferedEventDecoder.swift; sourceTree = "<group>"; };
+		22CC6A96972005D9565F0FA4 /* ClabotchEyeViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClabotchEyeViewTests.swift; sourceTree = "<group>"; };
+		2DCB9955406A6BDA3D525A4A /* AXProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXProvider.swift; sourceTree = "<group>"; };
+		4476ECA689707A583A562D9D /* BlinkControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlinkControllerTests.swift; sourceTree = "<group>"; };
 		4BAEFEF3B246C7D9B1BAAC02 /* Clabotch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Clabotch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		608C9DD4F8FDEC404C5D6227 /* EventParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventParserTests.swift; sourceTree = "<group>"; };
+		7E3CC2C07B97752CF8C9EAB3 /* BubbleWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleWindow.swift; sourceTree = "<group>"; };
 		84630FB49B993C3D7A6C40D5 /* StateMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateMachineTests.swift; sourceTree = "<group>"; };
 		87EDB190B5315651857591EE /* SocketOps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocketOps.swift; sourceTree = "<group>"; };
 		8F9A12D39178E19E1B5C2D2C /* HookServerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookServerTests.swift; sourceTree = "<group>"; };
+		900A8C1103779FDB804969C9 /* BlinkController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlinkController.swift; sourceTree = "<group>"; };
 		9518A1C1E31BBC6DDEDCB034 /* ClabotchTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClabotchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		96A3EDC104C593DEBC49336D /* EventParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventParser.swift; sourceTree = "<group>"; };
+		A076E8747B07F4A438A5A17B /* GazeTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GazeTypes.swift; sourceTree = "<group>"; };
 		AB06693ED6AB5DBC4E53A91D /* MascotPhase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotPhase.swift; sourceTree = "<group>"; };
 		AE38EF9CB1A7C37FF460B40A /* StateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateMachine.swift; sourceTree = "<group>"; };
+		BD17A2B7DC6C1976827DE887 /* MockProviders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockProviders.swift; sourceTree = "<group>"; };
 		BE8769A4983A7A928F5B17BD /* TestHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestHelpers.swift; sourceTree = "<group>"; };
+		C0F313BE981AA91C925B20DD /* GazeControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GazeControllerTests.swift; sourceTree = "<group>"; };
 		C6AFF63313CAE4EFD697FFE3 /* MockSocketOps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockSocketOps.swift; sourceTree = "<group>"; };
+		C99B10E5D8EC9D81419C6960 /* ClabotchEyeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClabotchEyeView.swift; sourceTree = "<group>"; };
 		CA0E74B3EDD35A52A575C4AE /* EventDeduplicatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDeduplicatorTests.swift; sourceTree = "<group>"; };
 		D1CFC51853BAEE81B0D77FC5 /* ClabotchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClabotchApp.swift; sourceTree = "<group>"; };
 		D6D641782D88ED126B539ECC /* HookServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookServer.swift; sourceTree = "<group>"; };
+		D7A0BEDE8BFCEAE3E5668F6B /* GazeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GazeController.swift; sourceTree = "<group>"; };
 		DACCB80479EEB2BBB2EF9272 /* EventDeduplicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDeduplicator.swift; sourceTree = "<group>"; };
+		E951BFD335706B02EB25141C /* AppDelegateCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegateCoordinatorTests.swift; sourceTree = "<group>"; };
+		F312F0F7D2D7BC2D60314798 /* BubbleWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleWindowTests.swift; sourceTree = "<group>"; };
 		F7EE57E153DC91A088C8A04A /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -63,10 +87,16 @@
 			isa = PBXGroup;
 			children = (
 				F7EE57E153DC91A088C8A04A /* AppDelegate.swift */,
+				2DCB9955406A6BDA3D525A4A /* AXProvider.swift */,
+				900A8C1103779FDB804969C9 /* BlinkController.swift */,
+				7E3CC2C07B97752CF8C9EAB3 /* BubbleWindow.swift */,
 				D1CFC51853BAEE81B0D77FC5 /* ClabotchApp.swift */,
 				1B07355B60F006A885B5E7A3 /* ClabotchEvent.swift */,
+				C99B10E5D8EC9D81419C6960 /* ClabotchEyeView.swift */,
 				DACCB80479EEB2BBB2EF9272 /* EventDeduplicator.swift */,
 				96A3EDC104C593DEBC49336D /* EventParser.swift */,
+				D7A0BEDE8BFCEAE3E5668F6B /* GazeController.swift */,
+				A076E8747B07F4A438A5A17B /* GazeTypes.swift */,
 				D6D641782D88ED126B539ECC /* HookServer.swift */,
 				223AA7DF7008B6A77962527B /* LineBufferedEventDecoder.swift */,
 				AB06693ED6AB5DBC4E53A91D /* MascotPhase.swift */,
@@ -79,10 +109,16 @@
 		3CD51ABE89600112AD8D723F /* ClabotchTests */ = {
 			isa = PBXGroup;
 			children = (
+				E951BFD335706B02EB25141C /* AppDelegateCoordinatorTests.swift */,
+				4476ECA689707A583A562D9D /* BlinkControllerTests.swift */,
+				F312F0F7D2D7BC2D60314798 /* BubbleWindowTests.swift */,
+				22CC6A96972005D9565F0FA4 /* ClabotchEyeViewTests.swift */,
 				CA0E74B3EDD35A52A575C4AE /* EventDeduplicatorTests.swift */,
 				608C9DD4F8FDEC404C5D6227 /* EventParserTests.swift */,
+				C0F313BE981AA91C925B20DD /* GazeControllerTests.swift */,
 				8F9A12D39178E19E1B5C2D2C /* HookServerTests.swift */,
 				0C9269667AD0FB5009C260E8 /* LineBufferedEventDecoderTests.swift */,
+				BD17A2B7DC6C1976827DE887 /* MockProviders.swift */,
 				C6AFF63313CAE4EFD697FFE3 /* MockSocketOps.swift */,
 				84630FB49B993C3D7A6C40D5 /* StateMachineTests.swift */,
 				BE8769A4983A7A928F5B17BD /* TestHelpers.swift */,
@@ -182,11 +218,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CCF278A6F2E1FEE5F39A9FBF /* AXProvider.swift in Sources */,
 				0DAA12FDCC0C41D7165D1135 /* AppDelegate.swift in Sources */,
+				FDF999A9C40E0550AAA18D1B /* BlinkController.swift in Sources */,
+				0FD047C1B96B55A730D81D10 /* BubbleWindow.swift in Sources */,
 				13E61BBE2C46EF2C2851235B /* ClabotchApp.swift in Sources */,
 				031195A51E4DEBCCCE79D315 /* ClabotchEvent.swift in Sources */,
+				1660A6857A7EB671F4C5076B /* ClabotchEyeView.swift in Sources */,
 				771BA242A93A8537221565C2 /* EventDeduplicator.swift in Sources */,
 				62E754140E7D27FDE0ECB018 /* EventParser.swift in Sources */,
+				85A036E57C9720D16E4C5522 /* GazeController.swift in Sources */,
+				5A73AA822128B508F58B2B27 /* GazeTypes.swift in Sources */,
 				4733B842423CC2C183621E54 /* HookServer.swift in Sources */,
 				15521049195B7B05052C8B8A /* LineBufferedEventDecoder.swift in Sources */,
 				51E4DD78AA01757BCDBBBAF0 /* MascotPhase.swift in Sources */,
@@ -199,10 +241,16 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				642D258774FA843536B2D9DE /* AppDelegateCoordinatorTests.swift in Sources */,
+				4507BDCA95968FC5B5010A1C /* BlinkControllerTests.swift in Sources */,
+				86849EB52E3D4CA14F34B2B5 /* BubbleWindowTests.swift in Sources */,
+				1B2007D899DDB7E3E5678143 /* ClabotchEyeViewTests.swift in Sources */,
 				9A503A3DBB67ECDCAA8F8749 /* EventDeduplicatorTests.swift in Sources */,
 				B0D2CA13463CF37F54E89244 /* EventParserTests.swift in Sources */,
+				963EDF12B3BB10FBF2A48488 /* GazeControllerTests.swift in Sources */,
 				39A4AC62A387316608C45E9B /* HookServerTests.swift in Sources */,
 				2525C627DF6293B8078C3C25 /* LineBufferedEventDecoderTests.swift in Sources */,
+				0CB9227D5E66E31C3F2E97ED /* MockProviders.swift in Sources */,
 				3E9F399F6BBD8C9CDA19B22E /* MockSocketOps.swift in Sources */,
 				7AAEC3EEC1D954C2B9D57E17 /* StateMachineTests.swift in Sources */,
 				05865EE9B15BE40CD15478B3 /* TestHelpers.swift in Sources */,

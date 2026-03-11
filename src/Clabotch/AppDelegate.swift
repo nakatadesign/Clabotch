@@ -3,7 +3,7 @@ import os.log
 
 /// メニューバー常駐アプリの AppDelegate。
 /// HookServer の起動・停止と NSStatusItem の管理を担当する。
-/// Coordinator 役: StateMachine.onPhaseChanged → GazeController / BlinkController の結線。
+/// Coordinator 役: StateMachine.onPhaseChanged → GazeController / BlinkController / ClabotchEyeView / BubbleWindow の結線。
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var hookServer: HookServer?
@@ -11,11 +11,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let stateMachine = StateMachine()
     private let gazeController = GazeController()
     private let blinkController = BlinkController()
+    private var eyeView: ClabotchEyeView?
+    private let bubbleWindow = BubbleWindow()
+    private let ephemeralBubbleWindow = BubbleWindow()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // メニューバーに「C」を表示
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem?.button?.title = "C"
+        // メニューバー設定（22px 固定幅）
+        statusItem = NSStatusBar.system.statusItem(withLength: 22)
+
+        // ClabotchEyeView をステータスバーボタンに埋め込む
+        if let button = statusItem?.button {
+            button.title = ""
+            let view = ClabotchEyeView(frame: button.bounds)
+            view.autoresizingMask = [.width, .height]
+            button.addSubview(view)
+            eyeView = view
+        }
 
         // メニュー構築
         let menu = NSMenu()
@@ -31,14 +42,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return CGPoint(x: frameOnScreen.midX, y: frameOnScreen.midY)
         }
 
-        // GazeController コールバック
-        gazeController.onGazeFrameChanged = { frame in
-            os_log(.info, "視線フレーム変更: %{public}@", String(describing: frame))
+        // GazeController → ClabotchEyeView
+        gazeController.onGazeFrameChanged = { [weak self] frame in
+            self?.eyeView?.setGazeFrame(frame)
         }
 
-        // BlinkController コールバック
-        blinkController.onBlink = {
-            os_log(.info, "まばたき発生")
+        // BlinkController → ClabotchEyeView
+        blinkController.onBlink = { [weak self] in
+            self?.eyeView?.triggerBlink()
         }
 
         // StateMachine コールバック（Coordinator 役）
@@ -53,9 +64,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // BlinkController: phase → enabled 変換
             let blinkEnabled = Self.isBlinkEnabled(for: phase)
             self.blinkController.setBlinking(enabled: blinkEnabled)
+
+            // ClabotchEyeView: phase → 外見変更
+            self.eyeView?.setPhaseAppearance(phase: phase)
+
+            // BubbleWindow: phase → 吹き出し表示
+            if let text = Self.bubbleText(for: phase) {
+                if let anchor = self.statusItemAnchor() {
+                    self.bubbleWindow.show(text: text, anchor: anchor)
+                }
+            } else {
+                self.bubbleWindow.dismiss()
+            }
         }
-        stateMachine.onEphemeralDone = { elapsedMs in
-            os_log(.info, "ephemeral done: %d ms", elapsedMs)
+
+        stateMachine.onEphemeralDone = { [weak self] elapsedMs in
+            guard let self else { return }
+            let text = Self.formatElapsedTime(elapsedMs)
+            let display = "別セッション完了 (\(text))"
+            if let anchor = self.statusItemAnchor() {
+                self.ephemeralBubbleWindow.show(text: display, anchor: anchor, duration: 2.0)
+            }
         }
 
         // HookServer 初期化・起動
@@ -87,6 +116,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        bubbleWindow.dismiss()
+        ephemeralBubbleWindow.dismiss()
         blinkController.setBlinking(enabled: false)
         gazeController.stopPolling()
         hookServer?.terminateSync()
@@ -100,18 +131,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     static func gazeOverride(for phase: MascotPhase) -> GazeOverride {
         switch phase {
-        case .idle:
-            return .fixed(frame: .f02_rightDown, reason: .mascotStateOverride)
-        case .thinking:
-            return .none
-        case .working:
-            return .none
-        case .done:
-            return .fixed(frame: .f02_rightDown, reason: .mascotStateOverride)
-        case .error:
-            return .fixed(frame: .f01_center, reason: .mascotStateOverride)
-        case .sleeping:
-            return .fixed(frame: .f01_center, reason: .mascotStateOverride)
+        case .idle:     return .fixed(frame: .f02_rightDown, reason: .mascotStateOverride)
+        case .thinking: return .none
+        case .working:  return .none
+        case .done:     return .fixed(frame: .f02_rightDown, reason: .mascotStateOverride)
+        case .error:    return .fixed(frame: .f01_center, reason: .mascotStateOverride)
+        case .sleeping: return .fixed(frame: .f01_center, reason: .mascotStateOverride)
         }
     }
 
@@ -119,10 +144,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     static func isBlinkEnabled(for phase: MascotPhase) -> Bool {
         switch phase {
-        case .idle, .thinking, .working, .done:
-            return true
-        case .error, .sleeping:
-            return false
+        case .idle, .thinking, .working, .done: return true
+        case .error, .sleeping:                 return false
         }
+    }
+
+    // MARK: - Phase → 吹き出し文言（v11 §6 準拠）
+
+    static func bubbleText(for phase: MascotPhase) -> String? {
+        switch phase {
+        case .thinking:
+            return "考えてます..."
+        case .working(let toolName):
+            return "\(toolName) 実行中..."
+        case .done(let elapsedMs):
+            if elapsedMs > 0 {
+                return "完了！(\(formatElapsedTime(elapsedMs)))"
+            } else {
+                return "完了！"
+            }
+        case .error:
+            return "エラーが出ました…"  // v11 §6 固定文言。詳細 error_message は v1.0+ (§13.6)
+        case .idle, .sleeping:
+            return nil
+        }
+    }
+
+    // MARK: - ヘルパー
+
+    static func formatElapsedTime(_ ms: Int) -> String {
+        let totalSeconds = ms / 1000
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+        if minutes > 0 {
+            return "\(minutes)分\(seconds)秒"
+        } else {
+            return "\(seconds)秒"
+        }
+    }
+
+    private func statusItemAnchor() -> CGPoint? {
+        guard let button = statusItem?.button,
+              let window = button.window else { return nil }
+        let frameInWindow = button.convert(button.bounds, to: nil)
+        let frameOnScreen = window.convertToScreen(frameInWindow)
+        return CGPoint(x: frameOnScreen.midX, y: frameOnScreen.minY)
     }
 }

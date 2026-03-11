@@ -3,85 +3,81 @@
 ## 1. セッション概要
 
 - **日時**: 2026-03-11（JST）
-- **作業目的**: 未コミット変更整理 + 計画 005 実装
+- **作業目的**: 計画 006 実装 + review-loop 完走
 - **全体進捗**:
-  - 完了: 計画 002, 003, 004, 005（受信パイプライン + StateMachine + GazeController/BlinkController）
-  - 未着手: BubbleWindow, ClabotchEyeView, AX tracking（Warp）
-  - 総テスト: **141 件**（140 passed, 1 skipped）
+  - 完了: 計画 002, 003, 004, 005, 006（受信パイプライン + StateMachine + GazeController/BlinkController + ClabotchEyeView/BubbleWindow）
+  - 未着手: AX tracking（Warp）
+  - 総テスト: **170 件**（169 passed, 1 skipped）
 
 ---
 
 ## 2. 完了した作業
 
-### 2a. 未コミット変更の整理（3 コミット）
+### 2a. 計画 006 実装 — ClabotchEyeView + BubbleWindow
 
-| コミット | 内容 |
-|---------|------|
-| `2839947` | review-loop Manager spot-check 事前記録フロー導入 |
-| `6c96a6f` | 計画 005 計画書（Codex 計画 A） |
-| `1e1fb17` | HANDOVER.md 更新 |
+review-loop job `plan006-impl` で 3 ラウンド実施し Grade A / done 達成。
 
-### 2b. 計画 005 実装 + Codex 実装レビュー A
+| ラウンド | Grade | 主な修正 |
+|---------|-------|---------|
+| Round 1 | C | 初期実装。sleeping blink race, ephemeral bubble 干渉, error 文言, テスト不足 |
+| Round 2 | B | 上記4件修正。クリック透過, 入力透過, frame06-08テスト不足 |
+| Round 3 | **A** | hitTest透過, ignoresMouseEvents, frame06-08描画テスト → **done** |
 
-| コミット | 内容 |
-|---------|------|
-| `5d4940f` | GazeController, BlinkController, AppDelegate 結線, テスト 33 件追加 |
+#### 新規ファイル
 
-- Codex 実装レビュー: **A**（S:0, B:1）
-  - B-1: `requestPermissionIfNeeded` に `dispatchPrecondition` がない → 修正済み
+| ファイル | 役割 |
+|----------|------|
+| `src/Clabotch/ClabotchEyeView.swift` | 22×14px NSView。全14フレーム Core Graphics 描画。hitTest 透過 |
+| `src/Clabotch/BubbleWindow.swift` | borderless NSWindow。3秒自動消去。入力透過 |
+| `src/ClabotchTests/ClabotchEyeViewTests.swift` | 17 件（状態遷移 + sleeping blink race + frame06-08描画 + hitTest） |
+| `src/ClabotchTests/BubbleWindowTests.swift` | 5 件（dismiss安全性 + 独立インスタンス） |
+
+#### 変更ファイル
+
+| ファイル | 変更内容 |
+|----------|---------|
+| `src/Clabotch/AppDelegate.swift` | Coordinator 結線: EyeView埋め込み, BubbleWindow show/dismiss, ephemeral分離, error固定文言 |
+| `src/ClabotchTests/AppDelegateCoordinatorTests.swift` | +6 件（bubbleText, formatElapsedTime, error固定文言） |
 
 ---
 
 ## 3. 重要な意思決定と理由
 
-### 3a. GazeController / BlinkController の DI 設計（逸脱 #1-#7）
+### 3a. ClabotchEyeView 設計判断
 
-- **AXProvider / WorkspaceProvider protocol**: AX API と NSWorkspace を protocol で抽象化し DI 注入。CI/テスト環境で AX 権限なしにテスト可能
-- **applyGaze() ヘルパー**: v11 では mode/gazeFrame を直接代入しているが、変更検知 + onGazeFrameChanged 通知を一元化するヘルパーを追加
-- **BlinkController.setBlinking(enabled:)**: AppDelegate が phase に応じて制御。BlinkController は MascotPhase を知らない（責務分離）
-- **タイマーリセット仕様**: setBlinking(enabled: true) は既存タイマーをリセットする。phase 切り替え直後にまばたきせず一拍おく意図
+- **hitTest 透過**: `hitTest(_:) → nil` で NSStatusBarButton にクリック委譲。描画専用ビューとして機能
+- **sleeping blink race 対策**: `setPhaseAppearance(.sleeping)` で `blinkTimer?.invalidate()` → blink reopen タイマーが sleeping 中の閉じ目を開けない
+- **private(set) 状態公開**: テスト用に gazeFrame, isBlinkClosed, faceColor, showErrorX, showSurprise を private(set) で公開
+
+### 3b. BubbleWindow 設計判断
+
+- **ephemeral/active 分離**: AppDelegate が `bubbleWindow`（active phase）と `ephemeralBubbleWindow`（foreign session_done）の2インスタンスを保持。干渉なし
+- **入力透過**: `ignoresMouseEvents = true` で通知専用
+- **error 文言固定**: v11 §6 の `"エラーが出ました…"` に統一。詳細 error_message は v1.0+ (§13.6)
+
+### 3c. ヘッドレステスト制約
+
+- BubbleWindow の `show()` は NSWindow 生成時に headless 環境で Signal 11 クラッシュ
+- テストは dismiss 安全性のみ。show/auto-dismiss のテスト seam は次計画にバックログ化
 
 ---
 
 ## 4. 次のステップ（優先度順）
 
 ### 🔴 高優先度
-- **計画 006: BubbleWindow + ClabotchEyeView 実装**（設計書 §11）
-  - 22×14px フレーム描画
-  - 14 フレームアニメーション
-  - 吹き出しウィンドウ
+- **BubbleWindow テスト seam**: Timer/NSWindow 生成の DI 注入点追加（can_defer バックログ）
+- **22×14 canvas 中央配置**: ClabotchEyeView の button 内での垂直中央揃え（can_defer バックログ）
 
-### 🟢 低優先度
+### 🟡 中優先度
 - Warp AX 属性ダンプ → tentativeBundles 昇格判断
-- Stop hook error 対応（別件、tasks/todo.md で管理）
 - main ブランチの origin への push
 
----
-
-## 5. 重要ファイルマップ
-
-### 計画 005 で追加
-
-| ファイル | 役割 |
-|----------|------|
-| `src/Clabotch/GazeTypes.swift` | GazeFrame, GazePermissionStatus, GazeMode, FixedGazeReason, GazeOverride |
-| `src/Clabotch/AXProvider.swift` | AXProvider/WorkspaceProvider protocol + Real 実装 |
-| `src/Clabotch/GazeController.swift` | 視線追跡コントローラー（DI 注入、0.5秒ポーリング） |
-| `src/Clabotch/BlinkController.swift` | まばたき制御（2.8〜5.5秒ランダム間隔） |
-| `src/ClabotchTests/MockProviders.swift` | MockAXProvider / MockWorkspaceProvider |
-| `src/ClabotchTests/GazeControllerTests.swift` | 23 件 |
-| `src/ClabotchTests/BlinkControllerTests.swift` | 6 件 |
-| `src/ClabotchTests/AppDelegateCoordinatorTests.swift` | 4 件 |
-
-### 計画 005 で変更
-
-| ファイル | 変更内容 |
-|----------|---------|
-| `src/Clabotch/AppDelegate.swift` | GazeController/BlinkController 所有 + onPhaseChanged 結線 |
+### 🟢 低優先度
+- Stop hook error 対応（tasks/todo.md）
 
 ---
 
-## 6. 環境・依存関係メモ
+## 5. 環境・依存関係メモ
 
 - **ビルドコマンド**: `cd src && xcodegen generate && xcodebuild test -project Clabotch.xcodeproj -scheme Clabotch -destination 'platform=macOS'`
 - **project.yml**: `src/project.yml`（`src/` で xcodegen 実行必須）
@@ -97,4 +93,4 @@
 | HANDOVER.md.bak がリポジトリルートに残存 | バックアップファイル。コミット不要。必要なら削除 |
 | main ブランチが origin より先行 | push していない。次セッションで push 判断 |
 | Warp の AX 属性（GazeController tentativeBundles） | AX 属性ダンプ後に昇格判断 |
-| Stop hook error | 別件。tasks/todo.md で管理 |
+| BubbleWindow show() headless テスト不可 | テスト seam 導入で対応予定 |
