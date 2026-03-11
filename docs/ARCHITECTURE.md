@@ -5,6 +5,9 @@
 全ての実装判断は `docs/design/current/clabotch_design_doc_v11.md` に従う。
 本ファイルはその要約・チェックリストとして機能する。
 
+**承認済み例外:** `docs/design/patches/` に patch 文書として記録。
+正典の特定項目に対する例外であり、正典の優先順位は変えない。
+
 ---
 
 ## ディレクトリ構成

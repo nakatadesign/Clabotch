@@ -40,6 +40,7 @@ $(job_dir "$job_name")
 - \`.claude/review-loop/bin/record_claude_round.sh --job-name $job_name --summary-file <summary.md> --changed-file <file> ... --quality-analyze "<text>" --quality-test "<text>" [--quality-notes "<text>"]\`
 - \`.claude/review-loop/bin/run_reviewer.sh --job-name $job_name\`
 - \`.claude/review-loop/bin/run_judge.sh --job-name $job_name\`
+- \`.claude/review-loop/bin/apply_manager_decision.sh --job-name $job_name --decision <fix|continue|done|human> [--reason "<text>"]\`
 
 各 loop tick でやること:
 1. \`status.sh\` で state を確認する
@@ -52,8 +53,10 @@ $(job_dir "$job_name")
    - \`record_claude_round.sh\` を実行する
    - \`run_reviewer.sh\` を実行する
    - \`run_judge.sh\` を実行する
+   - judge の recommendation を読み、\`apply_manager_decision.sh\` で最終決定を確定する
 5. \`status\` が \`reviewing\` で止まっていたら \`run_reviewer.sh\` から再開する
 6. \`status\` が \`judging\` で止まっていたら \`run_judge.sh\` から再開する
+7. \`status\` が \`manager_review\` で止まっていたら \`apply_manager_decision.sh\` から再開する
 
 運用ルール:
 - runtime 操作は shell script だけで行う

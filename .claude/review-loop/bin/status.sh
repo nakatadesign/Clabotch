@@ -41,12 +41,20 @@ if [[ "$as_json" == "1" ]]; then
     judge_json="$(cat "$judge_path")"
   fi
 
+  judge_recommendation="null"
+  if [[ "$judge_json" != "null" ]]; then
+    judge_recommendation="$(echo "$judge_json" | jq -r '.recommendation // .decision // empty')"
+    judge_recommendation="\"$judge_recommendation\""
+  fi
+
   jq \
     --argjson reviewer_aggregate "$reviewer_json" \
     --argjson judge "$judge_json" \
+    --argjson judge_recommendation "$judge_recommendation" \
     '. + {
       reviewer_aggregate: $reviewer_aggregate,
-      judge: $judge
+      judge: $judge,
+      judge_recommendation: $judge_recommendation
     }' "$(state_file "$job_name")"
   exit 0
 fi
@@ -60,6 +68,7 @@ echo "last_critical_count: $(jq -r '.last_critical_count' "$(state_file "$job_na
 echo "updated_at: $(jq -r '.updated_at' "$(state_file "$job_name")")"
 
 if [[ -f "$judge_path" ]]; then
-  echo "judge_decision: $(jq -r '.decision' "$judge_path")"
+  echo "judge_recommendation: $(jq -r '.recommendation // .decision' "$judge_path")"
   echo "judge_reason: $(jq -r '.reason' "$judge_path")"
+  echo "spot_check_required: $(jq -r '.spot_check_required // false' "$judge_path")"
 fi

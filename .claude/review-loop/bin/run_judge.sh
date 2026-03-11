@@ -38,8 +38,10 @@ round_number="$(current_round "$job_name")"
 target_round_dir="$(round_dir "$job_name" "$round_number")"
 aggregate_path="$target_round_dir/reviewer_aggregate.json"
 summary_md="$target_round_dir/claude_summary.md"
+summary_json="$target_round_dir/claude_summary.json"
 supervisor_spec="$REPO_ROOT/.claude/review-loop/SUPERVISOR.md"
 [[ -f "$summary_md" ]] || die "claude_summary.md が見つかりません"
+[[ -f "$summary_json" ]] || die "claude_summary.json が見つかりません"
 [[ -f "$supervisor_spec" ]] || die "SUPERVISOR.md が見つかりません"
 
 if [[ ! -f "$aggregate_path" && "$dry_run" != "1" ]]; then
@@ -89,6 +91,8 @@ $(if [[ -f "$aggregate_path" ]]; then cat "$aggregate_path"; else printf '%s\n' 
 出力ルール:
 - JSON のみを返す
 - Markdown コードフェンスは使わない
+- \`recommendation\` フィールドに \`fix\` / \`continue\` / \`done\` / \`human\` の推奨を入れる
+- これは推奨であり、最終決定は ClaudeCode Manager が行う
 - \`must_fix\` は今ラウンドで優先して直すべき点
 - \`can_defer\` は後回し可能な点
 - findings の再レビューではなく、今回の進行判断に必要な要約にとどめる
@@ -118,26 +122,34 @@ if ! printf '%s' "$prompt" | "${command[@]}" > "$stdout_log" 2> "$stderr_log"; t
   die "judge に失敗しました: $stderr_log"
 fi
 
-decision="$(jq -r '.decision' "$output_path")"
-next_status="human"
-case "$decision" in
-  done) next_status="done" ;;
-  fix) next_status="fix_requested" ;;
-  continue) next_status="continue_requested" ;;
-  human) next_status="human" ;;
-  *) die "judge decision が不正です: $decision" ;;
-esac
+recommendation="$(jq -r '.recommendation' "$output_path")"
 
+# recommendation が done の場合は spot_check_required を付与
+if [[ "$recommendation" == "done" ]]; then
+  output_tmp="$(mktemp)"
+  jq \
+    --argjson spot_check_required true \
+    '.spot_check_required = $spot_check_required' \
+    "$output_path" > "$output_tmp"
+  mv "$output_tmp" "$output_path"
+else
+  # done 以外は spot_check_required = false
+  output_tmp="$(mktemp)"
+  jq \
+    --argjson spot_check_required false \
+    '.spot_check_required = $spot_check_required' \
+    "$output_path" > "$output_tmp"
+  mv "$output_tmp" "$output_path"
+fi
+
+# judge は recommendation のみ。state.json を manager_review にして Manager の判断を待つ
 state_tmp="$(mktemp)"
 jq \
   --arg updated_at "$(timestamp)" \
-  --arg decision "$decision" \
-  --arg next_status "$next_status" \
-  '.last_decision = $decision
-   | .status = $next_status
+  '.status = "manager_review"
    | .updated_at = $updated_at' \
   "$(state_file "$job_name")" > "$state_tmp"
 mv "$state_tmp" "$(state_file "$job_name")"
 
-append_event "$job_name" "run-judge" "round $round_number judge returned $decision"
+append_event "$job_name" "run-judge" "round $round_number judge recommended $recommendation"
 printf '%s\n' "$output_path"

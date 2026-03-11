@@ -15,10 +15,14 @@ Swift・macOS・AppKit・Core Graphics・Unix domain socket・API設計の専門
 
 ## Review Loop 運用
 
-このリポジトリでは、Claude Code が `/loop` の controller になり、shell script 経由で 2 本の CodexCLI を呼び出して進行を制御できる。
+このリポジトリでは、Claude Code が `/loop` の controller になり、shell script 経由で CodexCLI を呼び出して進行を制御できる。
 
-- reviewer: 変更ファイルを read-only でレビューする
-- judge: reviewer の集約結果と進捗を見て `fix / continue / done / human` を判定する supervisor
+4役構成:
+
+- **Manager** (`.claude/agents/manager.md`): review-loop の最終決定・指揮。実装はしない
+- **Analyst** (`run_judge.sh` + `SUPERVISOR.md`): reviewer 結果を集約し recommendation を提示する。最終決定はしない
+- **Engineer** (`swift-engineer.md` / `hook-engineer.md`): 実装専任
+- **Reviewer** (`run_reviewer.sh` + `AGENTS.md`): read-only レビュー
 
 review-loop の補助ファイルは `.claude/review-loop/` 配下にある。
 runtime は `.claude/review-loop/runtime/<job>/` に保存される。
@@ -45,8 +49,10 @@ active job がある場合、各 tick で次を行う。
    - `.claude/review-loop/bin/record_claude_round.sh --job-name <active-job> ...` を実行する
    - `.claude/review-loop/bin/run_reviewer.sh --job-name <active-job>` を実行する
    - `.claude/review-loop/bin/run_judge.sh --job-name <active-job>` を実行する
+   - `.claude/review-loop/bin/apply_manager_decision.sh --job-name <active-job> --decision <fix|continue|done|human>` を実行する
 5. `status=reviewing` で止まっている場合は `.claude/review-loop/bin/run_reviewer.sh --job-name <active-job>` から再開する
 6. `status=judging` で止まっている場合は `.claude/review-loop/bin/run_judge.sh --job-name <active-job>` から再開する
+7. `status=manager_review` で止まっている場合は `.claude/review-loop/bin/apply_manager_decision.sh --job-name <active-job> --decision <decision>` から再開する
 
 ### review-loop 実行ルール
 

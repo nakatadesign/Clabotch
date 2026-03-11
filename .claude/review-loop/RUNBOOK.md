@@ -4,31 +4,35 @@
 
 - reviewer
   - 変更ファイルを read-only でレビューする
-- judge
-  - reviewer の集約結果を見て `fix / continue / done / human` を判定する supervisor
+- judge (Analyst)
+  - reviewer の集約結果を見て `fix / continue / done / human` の recommendation を提示する
+- Manager
+  - judge の recommendation を読み、最終決定を確定する
 
 ## 役割分担
 
 ```mermaid
 flowchart LR
-  U["User"] --> C["Claude Code (/loop)"]
-  C --> R["Codex reviewer"]
-  C --> J["Codex supervisor (judge)"]
-  R --> C
-  J --> C
-  C --> U
+  U["User"] --> M["ClaudeCode Manager"]
+  M --> E["ClaudeCode Engineer"]
+  E --> R["Codex Reviewer"]
+  R --> A["Codex Analyst (judge)"]
+  A --> M
+  M --> U
 ```
 
-- Claude
+- Manager (`.claude/agents/manager.md`)
+  - review-loop の最終決定・指揮
+  - judge の recommendation を読み、`apply_manager_decision.sh` で final decision を確定する
+  - 実装はしない
+- Engineer (`swift-engineer.md` / `hook-engineer.md`)
   - 実装する
-  - 現在の job 状態を見る
-  - reviewer と judge を shell script で呼ぶ
-  - supervisor の decision に従って次ラウンドを進めるか止める
-- Codex reviewer
+  - summary markdown を保存し、`record_claude_round.sh` を実行する
+- Codex Reviewer
   - 最大 3 ファイル単位で read-only レビューする
-- Codex supervisor
-  - reviewer 集約結果と進捗を見て進行判断する
-  - 詳細レビューではなく優先順位付けと停止条件の判定を担当する
+- Codex Analyst (judge)
+  - reviewer 集約結果と進捗を見て recommendation を提示する
+  - 最終決定はしない。詳細レビューではなく優先順位付けと停止条件の判定を担当する
 
 ## 使うファイル
 
@@ -106,8 +110,10 @@ Claude は各 tick で次を行います。
    - `record_claude_round.sh` を実行する
    - `run_reviewer.sh` を実行する
    - `run_judge.sh` を実行する
+   - `apply_manager_decision.sh` で最終決定を確定する
 5. `reviewing` で止まっていたら reviewer から再開する
 6. `judging` で止まっていたら judge から再開する
+7. `manager_review` で止まっていたら `apply_manager_decision.sh` から再開する
 
 ## 人が見るコマンド
 
@@ -133,6 +139,8 @@ goal テンプレート確認:
   - reviewer 実行待ち
 - `judging`
   - judge 実行待ち
+- `manager_review`
+  - judge の recommendation が出た。Manager の最終決定待ち
 - `fix_requested`
   - 修正して次ラウンドへ進む
 - `continue_requested`
@@ -145,7 +153,7 @@ goal テンプレート確認:
 ## 運用メモ
 
 - reviewer / judge はどちらも `codex` を read-only で使う
-- judge は `SUPERVISOR.md` に従い、進行判断だけを行う
+- judge は `SUPERVISOR.md` に従い、recommendation を提示する。最終決定は `apply_manager_decision.sh` で Manager が行う
 - summary markdown は runtime 配下に置く
 - 変更は小さく保つ
 - 重大指摘を優先する

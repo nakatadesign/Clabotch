@@ -18,21 +18,9 @@
       "Bash(.claude/review-loop/bin/record_claude_round.sh:*)",
       "Bash(.claude/review-loop/bin/run_reviewer.sh:*)",
       "Bash(.claude/review-loop/bin/run_judge.sh:*)",
+      "Bash(.claude/review-loop/bin/apply_manager_decision.sh:*)",
       "Bash(.claude/review-loop/bin/render_loop_prompt.sh:*)",
       "Bash(.claude/review-loop/bin/templates.sh:*)"
-    ]
-  },
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "osascript -e 'tell application \"Messages\" to send \"✅タスク完了\" to buddy \"+818055026969\"'"
-          }
-        ]
-      }
     ]
   }
 }
