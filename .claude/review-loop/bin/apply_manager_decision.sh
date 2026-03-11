@@ -89,7 +89,7 @@ ensure_job_exists "$job_name"
 # status が manager_review であることを検証（--force で回避可能）
 current="$(current_status "$job_name")"
 if [[ "$force" != "1" && "$current" != "manager_review" ]]; then
-  die "status が manager_review ではありません: $current（--force で強制実行可能）"
+  die "status が manager_review ではありません: ${current} (--force で強制実行可能)"
 fi
 
 case "$decision" in
