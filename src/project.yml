@@ -1,0 +1,35 @@
+name: Clabotch
+options:
+  deploymentTarget:
+    macOS: "13.0"
+  bundleIdPrefix: com.clabotch
+settings:
+  base:
+    INFOPLIST_KEY_LSUIElement: YES
+targets:
+  Clabotch:
+    type: application
+    platform: macOS
+    sources:
+      - Clabotch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.clabotch.app
+        PRODUCT_NAME: Clabotch
+        INFOPLIST_KEY_LSUIElement: YES
+        CODE_SIGN_ENTITLEMENTS: ""
+        ENABLE_APP_SANDBOX: NO
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: YES
+  ClabotchTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - ClabotchTests
+    dependencies:
+      - target: Clabotch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.clabotch.tests
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: YES
