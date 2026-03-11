@@ -68,7 +68,11 @@ final class CoordinatorBinder {
             guard let self else { return }
             let text = Self.formatElapsedTime(elapsedMs)
             let display = "別セッション完了 (\(text))"
-            if let anchor = self.anchorProvider() {
+            if var anchor = self.anchorProvider() {
+                // activeBubble 表示中なら下にずらして重なりを回避
+                if self.activeBubble.isShowing {
+                    anchor.y -= Self.bubbleStackOffset
+                }
                 self.ephemeralBubble.show(text: display, anchor: anchor, duration: 2.0)
             }
         }
@@ -116,6 +120,11 @@ final class CoordinatorBinder {
             return nil
         }
     }
+
+    // MARK: - 定数
+
+    /// activeBubble 表示中に ephemeralBubble を下にずらすオフセット（ポイント）
+    static let bubbleStackOffset: CGFloat = 30
 
     // MARK: - ヘルパー
 

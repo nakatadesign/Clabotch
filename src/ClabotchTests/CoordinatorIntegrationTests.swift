@@ -254,10 +254,12 @@ final class CoordinatorIntegrationTests: XCTestCase {
         XCTAssertEqual(activeBubbleSpy.showCalls.count, activeCountBefore)
     }
 
-    func testD2EphemeralDoneWithActivePhase() {
+    func testD2EphemeralDoneWithActivePhaseOffsetsAnchor() {
         stateMachine.handle(event: .sessionStart(sessionID: "s1"))
         stateMachine.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
 
+        // activeBubble は working フェーズで表示中
+        XCTAssertTrue(activeBubbleSpy.isShowing)
         let lastText = activeBubbleSpy.lastText
 
         stateMachine.handle(event: .sessionDone(sessionID: "s-foreign", elapsedMs: 5000))
@@ -268,6 +270,36 @@ final class CoordinatorIntegrationTests: XCTestCase {
 
         // active bubble のテキストは working のまま
         XCTAssertEqual(activeBubbleSpy.lastText, lastText)
+
+        // ephemeral は activeBubble が表示中なので anchor が下にオフセットされる
+        let call = ephemeralBubbleSpy.showCalls.last!
+        let expectedY = 100.0 - CoordinatorBinder.bubbleStackOffset
+        XCTAssertEqual(call.anchor.y, expectedY, accuracy: 0.01)
+        XCTAssertEqual(call.anchor.x, 100.0, accuracy: 0.01)
+    }
+
+    func testD2bEphemeralDoneWithoutActiveUsesOriginalAnchor() {
+        // active session を確立するが、idle フェーズ（bubble 非表示）
+        stateMachine.handle(event: .sessionStart(sessionID: "s1"))
+        stateMachine.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 3000))
+
+        // done → idle への自動遷移を待つ
+        waitForCondition(description: "idle phase") {
+            self.stateMachine.displayPhase == .idle
+        }
+
+        // activeBubble は非表示
+        XCTAssertFalse(activeBubbleSpy.isShowing)
+
+        stateMachine.handle(event: .sessionDone(sessionID: "s-foreign", elapsedMs: 5000))
+
+        waitForCondition(description: "ephemeral bubble shows") {
+            self.ephemeralBubbleSpy.showCalls.count > 0
+        }
+
+        // activeBubble 非表示 → オフセットなし
+        let call = ephemeralBubbleSpy.showCalls.last!
+        XCTAssertEqual(call.anchor.y, 100.0, accuracy: 0.01)
     }
 
     func testD3ForeignDoneZeroMsSilentDrop() {
