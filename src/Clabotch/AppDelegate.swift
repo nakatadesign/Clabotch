@@ -70,17 +70,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
 
+        // HookServer 初期化・起動（UI 初期化とは独立）
         do {
             try hookServer?.start()
             os_log(.info, "HookServer started")
-            stateMachine.start()          // ① 初期フェーズ emit → setOverride / setBlinking
-            gazeController.startPolling() // ② polling 開始
         } catch let error as HookServerError where error == .alreadyRunning {
             os_log(.error, "既に別インスタンスが起動中")
             NSApplication.shared.terminate(nil)
+            return  // terminate 後の処理を明示的に停止
         } catch {
-            os_log(.error, "HookServer failed to start: %{public}@", error.localizedDescription)
+            os_log(.fault, "HookServer failed to start: %{public}@", error.localizedDescription)
+            // HookServer なしで続行（フック未受信だがマスコットとして最低限動作）
         }
+
+        // UI 初期化（HookServer の成否に依存しない）
+        stateMachine.start()          // ① 初期フェーズ emit → setOverride / setBlinking
+        gazeController.startPolling() // ② polling 開始
     }
 
     func applicationWillTerminate(_ notification: Notification) {

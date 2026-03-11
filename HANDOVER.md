@@ -3,9 +3,9 @@
 ## 1. セッション概要
 
 - **日時**: 2026-03-12（JST）
-- **作業目的**: 計画 007 実装（CoordinatorBinder 抽出 + 下流連携テスト）
+- **作業目的**: 計画 007 実装 + 計画 008 バグ修正
 - **全体進捗**:
-  - 完了: 計画 002, 003, 004, 005, 006, 007
+  - 完了: 計画 002, 003, 004, 005, 006, 007, 008
   - 未着手: AX tracking（Warp）
   - 総テスト: **195 件**（194 passed, 1 skipped）
 
@@ -13,72 +13,70 @@
 
 ## 2. 完了した作業
 
-### 2a. 計画 007 実装 — CoordinatorBinder 抽出 + 下流連携テスト
+### 2a. 計画 007 — CoordinatorBinder 抽出 + 下流連携テスト
 
 review-loop job `plan007-impl` で 2 ラウンド実施し done 達成。
 
 | ラウンド | Grade | 主な修正 |
 |---------|-------|---------|
-| Round 1 | B | 初期実装。os_log に error message 漏洩、BubbleSpy.lastText dismiss 後残存、単体テスト未検証分岐 |
+| Round 1 | B | 初期実装。os_log に error message 漏洩、BubbleSpy.lastText dismiss 後残存 |
 | Round 2 | B | os_log 秘匿（phaseName）、BubbleSpy dismiss クリア、単体テスト +4 件 → **done** |
 
 #### 新規ファイル
 
 | ファイル | 役割 |
 |----------|------|
-| `src/Clabotch/BubblePresenting.swift` | 吹き出し表示プロトコル（BubbleWindow と BubbleSpy が準拠） |
-| `src/Clabotch/CoordinatorBinder.swift` | AppDelegate から抽出した結線ロジック。os_log は case 名のみ出力 |
-| `src/ClabotchTests/BubbleSpy.swift` | BubblePresenting 準拠の test double。dismiss で lastText クリア |
-| `src/ClabotchTests/CoordinatorIntegrationTests.swift` | 20 件（A1-A6, B1-B2, C1-C2, D1-D3, E1-E2, F1-F2, G1, H1-H3） |
+| `src/Clabotch/BubblePresenting.swift` | 吹き出し表示プロトコル |
+| `src/Clabotch/CoordinatorBinder.swift` | AppDelegate から抽出した結線ロジック |
+| `src/ClabotchTests/BubbleSpy.swift` | BubblePresenting 準拠の test double |
+| `src/ClabotchTests/CoordinatorIntegrationTests.swift` | 統合テスト 20 件 |
 
 #### 変更ファイル
 
 | ファイル | 変更内容 |
 |----------|---------|
 | `src/Clabotch/BubbleWindow.swift` | BubblePresenting 準拠宣言追加 |
-| `src/Clabotch/AppDelegate.swift` | callback 直接代入 → CoordinatorBinder 生成 + bind() に変更。static メソッド移設 |
-| `src/ClabotchTests/AppDelegateCoordinatorTests.swift` | 参照先を CoordinatorBinder に変更 + .working/.done/.sleeping マッピングテスト追加 |
+| `src/Clabotch/AppDelegate.swift` | CoordinatorBinder 委譲 + static メソッド移設 |
+| `src/ClabotchTests/AppDelegateCoordinatorTests.swift` | 参照更新 + マッピングテスト追加 |
+
+### 2b. 計画 008 — HookServer 起動失敗時の半初期化修正
+
+Codex 計画レビュー A + 実装レビュー A を取得。
+
+| ファイル | 変更内容 |
+|----------|---------|
+| `src/Clabotch/AppDelegate.swift` | `stateMachine.start()` / `gazeController.startPolling()` を do-catch 外に移動。`.alreadyRunning` catch に `return` 追加。ログレベル `.error` → `.fault` に昇格 |
 
 ---
 
 ## 3. 重要な意思決定と理由
 
-### 3a. CoordinatorBinder 抽出
+### 3a. CoordinatorBinder 抽出（計画 007）
 
-- **目的**: AppDelegate の結線ロジックを自動テストで検証可能にする
-- **方法**: `onPhaseChanged` / `onEphemeralDone` callback 設定 + static 変換メソッドを CoordinatorBinder に移設
-- **AppDelegate の残コード**: binder 生成 + bind() 呼び出し + statusItemCenterProvider 設定のみ（目視レビュー範囲）
+- AppDelegate の結線ロジックを CoordinatorBinder に移設し、自動テストで検証可能にした
+- os_log は `phaseName()` で case 名のみ出力（error message 漏洩防止）
+- BubblePresenting プロトコルで BubbleWindow を抽象化（テストでは BubbleSpy を注入）
 
-### 3b. os_log 秘匿
+### 3b. HookServer 起動失敗修正（計画 008）
 
-- `String(describing: phase)` → `phaseName()` に変更。`.error(toolName:message:)` の associated value を公開ログに出さない
-
-### 3c. BubblePresenting プロトコル
-
-- BubbleWindow の show/dismiss を抽象化。テストでは BubbleSpy（NSWindow 不要）を注入
-- BubbleWindow は `BubblePresenting` に準拠宣言追加のみ（既存シグネチャがそのまま適合）
-
-### 3d. テスト設計判断
-
-- **observable state パターン**: bind() が設定した callback を差し替えず、下流の状態（eyeView.gazeFrame, blinkController.isBlinking 等）をポーリングで検証
-- **async-tolerant**: 現実装は同期だが、将来 async に変わっても耐える XCTestExpectation パターン
-- **F2（blink disabled）**: error auto-transition との干渉を避けるため sleeping phase ベースに変更
+- UI 初期化（StateMachine/GazeController）を HookServer の成否から独立させた
+- `.alreadyRunning` のみ terminate。その他のエラーではマスコットとして最低限動作を継続
+- terminate 後の `return` で、非同期 terminate と後続処理のレースを防止
 
 ---
 
 ## 4. 次のステップ（優先度順）
 
 ### 高優先度
-- **phaseName 回帰テスト**: reviewer 指摘（can_defer）。CoordinatorBinder.phaseName() の単体テスト追加
-- **BubbleWindow テスト seam**: Timer/NSWindow 生成の DI 注入点追加（can_defer バックログ）
-
-### 中優先度
 - Warp AX 属性ダンプ → tentativeBundles 昇格判断
 - main ブランチの origin への push
-- HookServer 起動失敗時の半初期化問題（reviewer 指摘、計画 007 スコープ外の既存問題）
+
+### 中優先度
+- phaseName 回帰テスト追加（reviewer 指摘 can_defer）
+- BubbleWindow テスト seam（Timer/NSWindow DI 注入）
 
 ### 低優先度
-- 22×14 canvas 中央配置（can_defer バックログ）
+- 22×14 canvas 中央配置
 - Stop hook error 対応（tasks/todo.md）
 
 ---
@@ -101,4 +99,3 @@ review-loop job `plan007-impl` で 2 ラウンド実施し done 達成。
 | Warp の AX 属性（GazeController tentativeBundles） | AX 属性ダンプ後に昇格判断 |
 | BubbleWindow show() headless テスト不可 | テスト seam 導入で対応予定 |
 | activeBubble/ephemeralBubble 同一型リスク | init パラメータ名で軽減。型安全ではなく手動レビュー依存 |
-| HookServer 起動失敗時の半初期化 | 既存問題。別 issue で追跡予定 |
