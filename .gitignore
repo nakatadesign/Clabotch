@@ -28,4 +28,11 @@ artifacts/*.zip
 
 # Claude Code local
 .claude/projects/
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/agents/
+!.claude/agents/**
+!.claude/review-loop/
+!.claude/review-loop/**
+.claude/review-loop/runtime/*
+!.claude/review-loop/runtime/.gitignore
