@@ -25,6 +25,11 @@ Swift・macOS・AppKit・Core Graphics・Unix domain socket・API設計の専門
 ただし、これは安全な隔離環境でのみ推奨する。
 本番 credential・個人ファイル・広い権限を持つ環境では、無確認実行を前提にしないこと。
 
+### 起動トリガー
+
+ユーザーが `/loop` を実行するか、貼り付けメッセージが `totonoe start` で始まる場合、そのメッセージ全体を現在の job の loop 開始または再開指示として扱う。
+`totonoe start` で始まる場合は、その後に続く `ジョブ名:`, `目的:`, `対象:`, `必須対応:`, `制約:`, `完了条件:`, `現在状態:`, `次の手順:` を優先して読み、現在の状態に応じて次の tick を実行する。
+
 ### 4つの役割
 
 - **Manager**（`.claude/agents/manager.md`）: ループの最終決定・指揮を担う。実装は行わない
@@ -40,7 +45,7 @@ Swift・macOS・AppKit・Core Graphics・Unix domain socket・API設計の専門
 4. 非 smoke job が複数ある場合は、ユーザーが会話またはコマンドで job 名を明示指定していなければ、runtime state は更新せずにユーザーにどの job を使うか確認して停止する
 5. 非 smoke job が 0 件なら totonoe は未初期化として扱い、通常の対話フローに戻る
 
-### /loop 起動後の動作
+### loop 開始後の動作
 
 有効なジョブがある場合、各ステップで以下を行います。
 
