@@ -2,7 +2,7 @@ import AppKit
 
 /// メニューバー上のマスコット描画ビュー。main thread 専用。
 /// PNG 素材ゼロ — 全フレームを Core Graphics で描画。
-/// v11 §3-§4, §8 準拠。patch_011 でフレーム 09〜14 追加。
+/// v11 §3-§4, §8 準拠。patch_011 でフレーム 09〜14、patch_012 でまばたき中間フレーム追加。
 final class ClabotchEyeView: NSView {
 
     // MARK: - 定数
@@ -23,7 +23,15 @@ final class ClabotchEyeView: NSView {
         static let thinkingDot = NSColor(red: 0x55/255.0, green: 0x77/255.0, blue: 0xAA/255.0, alpha: 1)
     }
 
-    // MARK: - アニメーション定数（patch_011）
+    /// まばたきの段階（patch_012: §4 blink シーケンス）
+    enum BlinkStage: Equatable, CaseIterable {
+        case open     // 目が開いている（通常描画）
+        case half     // 半閉じ: ソケット 4×4, 瞳 2×2
+        case almost   // ほぼ閉じ: ソケット 4×2, 瞳なし
+        case closed   // 完全閉じ: 横線 4×1（frame06）
+    }
+
+    // MARK: - アニメーション定数
 
     /// DONE アニメーション: 瞳位置の時計回りスピン（§4: 08→09→12→13→14→13→12）
     static let doneAnimSequence: [GazeFrame] = [
@@ -45,6 +53,16 @@ final class ClabotchEyeView: NSView {
         0,  // frame 07: 通常位置（停止）
     ]
 
+    /// まばたきシーケンス（§4: open→half→almost→closed→almost→half→open）
+    /// 各要素は (段階, 保持時間)
+    static let blinkSequence: [(stage: BlinkStage, duration: TimeInterval)] = [
+        (.half,   0.06),  // 60ms
+        (.almost, 0.06),  // 60ms
+        (.closed, 0.09),  // 90ms
+        (.almost, 0.06),  // 60ms
+        (.half,   0.06),  // 60ms
+    ]
+
     /// DONE アニメーション各ステップの間隔
     static let doneAnimInterval: TimeInterval = 0.12
 
@@ -60,11 +78,15 @@ final class ClabotchEyeView: NSView {
     // MARK: - 状態（private(set) でテストから参照可能）
 
     private(set) var gazeFrame: GazeFrame = .f02_rightDown
-    private(set) var isBlinkClosed: Bool = false
+    /// まばたきの現在の段階。.open 以外はまばたき中。
+    private(set) var blinkStage: BlinkStage = .open
     private(set) var faceColor: NSColor = Palette.faceNormal
     private(set) var showErrorX: Bool = false
     private(set) var showSurprise: Bool = false
     private var blinkTimer: Timer?
+
+    /// 後方互換: まばたき中（open 以外）かどうか
+    var isBlinkClosed: Bool { blinkStage != .open }
 
     // MARK: - アニメーション状態（patch_011）
 
@@ -88,6 +110,9 @@ final class ClabotchEyeView: NSView {
 
     /// ジャンプ現在ステップ
     private var jumpStep: Int = 0
+
+    /// まばたきシーケンスの現在ステップ
+    private var blinkSeqStep: Int = 0
 
     // MARK: - Init
 
@@ -120,19 +145,13 @@ final class ClabotchEyeView: NSView {
     }
 
     /// まばたきを発火する。BlinkController.onBlink から呼ばれる。
-    /// 簡易実装: open → closed(150ms) → open
+    /// §4: open → half(60ms) → almost(60ms) → closed(90ms) → almost(60ms) → half(60ms) → open
     func triggerBlink() {
         dispatchPrecondition(condition: .onQueue(.main))
-        guard !isBlinkClosed else { return }
-        isBlinkClosed = true
-        needsDisplay = true
+        guard blinkStage == .open else { return }
 
-        blinkTimer?.invalidate()
-        blinkTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in
-            guard let self else { return }
-            self.isBlinkClosed = false
-            self.needsDisplay = true
-        }
+        blinkSeqStep = 0
+        advanceBlinkSequence()
     }
 
     /// phase に応じた外見を設定する。AppDelegate が onPhaseChanged で呼ぶ。
@@ -147,28 +166,64 @@ final class ClabotchEyeView: NSView {
             faceColor = Palette.faceNormal
             showErrorX = false
             showSurprise = false
-            isBlinkClosed = false  // sleeping からの復帰時にリセット
+            cancelBlink()  // sleeping からの復帰時にリセット
         case .done:
             faceColor = Palette.faceDone
             showErrorX = false
             showSurprise = true
-            isBlinkClosed = false
+            cancelBlink()
             startDoneAnimation()
         case .error:
             faceColor = Palette.faceError
             showErrorX = true
             showSurprise = false
-            isBlinkClosed = false
+            cancelBlink()
             startErrorShakeAnimation()
         case .sleeping:
             faceColor = Palette.faceSleep
             showErrorX = false
             showSurprise = false
-            blinkTimer?.invalidate()  // 進行中の blink reopen を無効化
+            blinkTimer?.invalidate()  // 進行中の blink シーケンスを無効化
             blinkTimer = nil
-            isBlinkClosed = true  // v11 §6: sleeping は frame06（常時閉じ目）
+            blinkStage = .closed  // v11 §6: sleeping は frame06（常時閉じ目）
         }
         needsDisplay = true
+    }
+
+    // MARK: - まばたきシーケンス制御（patch_012）
+
+    /// まばたきシーケンスを次のステップに進める。
+    private func advanceBlinkSequence() {
+        guard blinkSeqStep < Self.blinkSequence.count else {
+            // シーケンス完了 — open に戻る
+            blinkStage = .open
+            blinkTimer?.invalidate()
+            blinkTimer = nil
+            needsDisplay = true
+            return
+        }
+
+        let step = Self.blinkSequence[blinkSeqStep]
+        blinkStage = step.stage
+        needsDisplay = true
+
+        blinkTimer?.invalidate()
+        blinkTimer = Timer.scheduledTimer(
+            withTimeInterval: step.duration,
+            repeats: false
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.blinkSeqStep += 1
+            self.advanceBlinkSequence()
+        }
+    }
+
+    /// 進行中のまばたきをキャンセルし open に戻す。
+    private func cancelBlink() {
+        blinkTimer?.invalidate()
+        blinkTimer = nil
+        blinkStage = .open
+        blinkSeqStep = 0
     }
 
     // MARK: - アニメーション制御（patch_011）
@@ -301,22 +356,31 @@ final class ClabotchEyeView: NSView {
         // 顔（16×12 at (3,1)）
         drawFace(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
 
-        if isBlinkClosed {
-            // まばたき / sleeping: 閉じ目（frame06）
+        switch blinkStage {
+        case .closed:
+            // 完全閉じ目（frame06）
             drawBlinkClosed(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
-        } else if showErrorX {
-            // エラー: ×マーク（frame07 / frame10 / frame11）
-            drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
-            drawErrorX(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
-        } else if showSurprise {
-            // DONE アニメーション（frame08〜14）
-            let pupilFrame = doneAnimPupilFrame ?? .f01_center
-            drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
-            drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy, frame: pupilFrame)
-        } else {
-            // 通常: 目 + 瞳
-            drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
-            drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy, frame: gazeFrame)
+        case .almost:
+            // ほぼ閉じ: ソケット 4×2、瞳なし（patch_012）
+            drawBlinkAlmost(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
+        case .half:
+            // 半閉じ: ソケット 4×4、瞳 2×2（patch_012）
+            drawBlinkHalf(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
+        case .open:
+            if showErrorX {
+                // エラー: ×マーク（frame07 / frame10 / frame11）
+                drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
+                drawErrorX(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
+            } else if showSurprise {
+                // DONE アニメーション（frame08〜14）
+                let pupilFrame = doneAnimPupilFrame ?? .f01_center
+                drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
+                drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy, frame: pupilFrame)
+            } else {
+                // 通常: 目 + 瞳
+                drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
+                drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy, frame: gazeFrame)
+            }
         }
     }
 
@@ -366,6 +430,25 @@ final class ClabotchEyeView: NSView {
         // 瞳: 2×6
         px(ctx, lx, ly, 2, 6, dot, ox: ox, oy: oy, dy: dy)
         px(ctx, rx, ry, 2, 6, dot, ox: ox, oy: oy, dy: dy)
+    }
+
+    /// 半閉じ（patch_012）: ソケット 4×4 at (5,5)/(13,5) + 瞳 2×2 中央
+    private func drawBlinkHalf(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {
+        // 縮小ソケット（白）
+        ctx.setFillColor(Palette.eyeWhite.cgColor)
+        px(ctx, 5, 5, 4, 4, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 13, 5, 4, 4, dot, ox: ox, oy: oy, dy: dy)
+        // 瞳 2×2 中央
+        ctx.setFillColor(Palette.pupil.cgColor)
+        px(ctx, 6, 6, 2, 2, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 14, 6, 2, 2, dot, ox: ox, oy: oy, dy: dy)
+    }
+
+    /// ほぼ閉じ（patch_012）: ソケット 4×2 at (5,6)/(13,6)、瞳なし
+    private func drawBlinkAlmost(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {
+        ctx.setFillColor(Palette.eyeWhite.cgColor)
+        px(ctx, 5, 6, 4, 2, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 13, 6, 4, 2, dot, ox: ox, oy: oy, dy: dy)
     }
 
     private func drawBlinkClosed(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {

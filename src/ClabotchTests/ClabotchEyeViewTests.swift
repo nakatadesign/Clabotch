@@ -19,6 +19,7 @@ final class ClabotchEyeViewTests: XCTestCase {
 
     func testInitialState() {
         XCTAssertEqual(sut.gazeFrame, .f02_rightDown)
+        XCTAssertEqual(sut.blinkStage, .open)
         XCTAssertFalse(sut.isBlinkClosed)
         XCTAssertFalse(sut.showErrorX)
         XCTAssertFalse(sut.showSurprise)
@@ -43,21 +44,83 @@ final class ClabotchEyeViewTests: XCTestCase {
 
     // MARK: - triggerBlink
 
-    func testTriggerBlinkSetsClosedState() {
+    func testTriggerBlinkSetsHalfStage() {
+        // patch_012: triggerBlink() の最初のステップは half
         sut.triggerBlink()
+        XCTAssertEqual(sut.blinkStage, .half)
         XCTAssertTrue(sut.isBlinkClosed)
     }
 
     func testBlinkAutoOpens() {
+        // patch_012: 全シーケンス 330ms（half60+almost60+closed90+almost60+half60）
         sut.triggerBlink()
         XCTAssertTrue(sut.isBlinkClosed)
 
         let exp = expectation(description: "まばたき自動復帰")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            XCTAssertEqual(self.sut.blinkStage, .open)
             XCTAssertFalse(self.sut.isBlinkClosed)
             exp.fulfill()
         }
-        wait(for: [exp], timeout: 1.0)
+        wait(for: [exp], timeout: 1.5)
+    }
+
+    // MARK: - まばたきシーケンス（patch_012）
+
+    func testBlinkSequenceDefinition() {
+        // §4 定義: open → half(60ms) → almost(60ms) → closed(90ms) → almost(60ms) → half(60ms) → open
+        let seq = ClabotchEyeView.blinkSequence
+        XCTAssertEqual(seq.count, 5)
+        XCTAssertEqual(seq[0].stage, .half)
+        XCTAssertEqual(seq[1].stage, .almost)
+        XCTAssertEqual(seq[2].stage, .closed)
+        XCTAssertEqual(seq[3].stage, .almost)
+        XCTAssertEqual(seq[4].stage, .half)
+
+        // タイミング検証
+        XCTAssertEqual(seq[0].duration, 0.06, accuracy: 0.001)
+        XCTAssertEqual(seq[1].duration, 0.06, accuracy: 0.001)
+        XCTAssertEqual(seq[2].duration, 0.09, accuracy: 0.001)
+        XCTAssertEqual(seq[3].duration, 0.06, accuracy: 0.001)
+        XCTAssertEqual(seq[4].duration, 0.06, accuracy: 0.001)
+    }
+
+    func testBlinkTotalDuration330ms() {
+        // §4: 合計 330ms
+        let total = ClabotchEyeView.blinkSequence.reduce(0.0) { $0 + $1.duration }
+        XCTAssertEqual(total, 0.33, accuracy: 0.001)
+    }
+
+    func testBlinkIgnoredWhileAlreadyBlinking() {
+        // 再発火が無視され、元のスケジュールどおり 330ms で open に戻ることを検証
+        sut.triggerBlink()
+        XCTAssertEqual(sut.blinkStage, .half)
+
+        // almost に遷移した後に再発火を試みる
+        let exp = expectation(description: "再発火が無視されて元のタイミングで open に戻る")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            // almost に遷移済み
+            XCTAssertEqual(self.sut.blinkStage, .almost, "60ms 後は almost")
+            // 再発火 → 無視されるべき
+            self.sut.triggerBlink()
+            XCTAssertEqual(self.sut.blinkStage, .almost, "まばたき中の再発火は無視されるべき")
+        }
+        // 元のタイミング（330ms + α）で open に戻ることを確認
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            XCTAssertEqual(self.sut.blinkStage, .open, "再発火しても元のスケジュールで open に戻るべき")
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.5)
+    }
+
+    func testBlinkStageAllCases() {
+        // BlinkStage の全ケースが定義されている
+        let cases = ClabotchEyeView.BlinkStage.allCases
+        XCTAssertEqual(cases.count, 4)
+        XCTAssertTrue(cases.contains(.open))
+        XCTAssertTrue(cases.contains(.half))
+        XCTAssertTrue(cases.contains(.almost))
+        XCTAssertTrue(cases.contains(.closed))
     }
 
     // MARK: - setPhaseAppearance
@@ -91,35 +154,37 @@ final class ClabotchEyeViewTests: XCTestCase {
         XCTAssertEqual(sut.faceColor, ClabotchEyeView.Palette.faceSleep)
         XCTAssertFalse(sut.showErrorX)
         XCTAssertFalse(sut.showSurprise)
-        XCTAssertTrue(sut.isBlinkClosed)  // v11 §6: sleeping は frame06（常時閉じ目）
+        XCTAssertEqual(sut.blinkStage, .closed)  // v11 §6: sleeping は frame06（常時閉じ目）
+        XCTAssertTrue(sut.isBlinkClosed)
     }
 
     func testSleepingToIdleResetsBlinkClosed() {
         sut.setPhaseAppearance(phase: .sleeping)
-        XCTAssertTrue(sut.isBlinkClosed)
+        XCTAssertEqual(sut.blinkStage, .closed)
 
         sut.setPhaseAppearance(phase: .idle)
+        XCTAssertEqual(sut.blinkStage, .open)
         XCTAssertFalse(sut.isBlinkClosed)
     }
 
     // MARK: - sleeping が blink reopen タイマーを無効化する
 
     func testSleepingCancelsBlinkReopenTimer() {
-        // blink を発火（150ms 後に reopen するタイマーが走る）
+        // blink を発火（330ms のシーケンスが走る）
         sut.triggerBlink()
         XCTAssertTrue(sut.isBlinkClosed)
 
         // 即座に sleeping に遷移 → blinkTimer が無効化される
         sut.setPhaseAppearance(phase: .sleeping)
-        XCTAssertTrue(sut.isBlinkClosed)
+        XCTAssertEqual(sut.blinkStage, .closed)
 
-        // 150ms + α 後もまだ閉じたままであること（タイマーが無効化されていれば reopen しない）
+        // 500ms 後もまだ閉じたままであること（タイマーが無効化されていれば reopen しない）
         let exp = expectation(description: "sleeping 中は閉じ目維持")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            XCTAssertTrue(self.sut.isBlinkClosed, "sleeping 中に blink reopen が発火してはいけない")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            XCTAssertEqual(self.sut.blinkStage, .closed, "sleeping 中に blink reopen が発火してはいけない")
             exp.fulfill()
         }
-        wait(for: [exp], timeout: 1.0)
+        wait(for: [exp], timeout: 1.5)
     }
 
     // MARK: - 描画テスト（draw() がクラッシュしないこと + 状態整合性）
@@ -149,6 +214,40 @@ final class ClabotchEyeViewTests: XCTestCase {
         sut.triggerBlink()
         XCTAssertTrue(sut.isBlinkClosed)
         sut.display()
+    }
+
+    func testDrawAllBlinkStagesDoesNotCrash() {
+        // patch_012: 全 BlinkStage で描画がクラッシュしないことを確認
+        // half（triggerBlink 直後）
+        sut.triggerBlink()
+        XCTAssertEqual(sut.blinkStage, .half)
+        sut.display()
+
+        // sleeping → closed（直接設定）
+        sut.setPhaseAppearance(phase: .sleeping)
+        XCTAssertEqual(sut.blinkStage, .closed)
+        sut.display()
+
+        // idle → open
+        sut.setPhaseAppearance(phase: .idle)
+        XCTAssertEqual(sut.blinkStage, .open)
+        sut.display()
+    }
+
+    func testDrawBlinkAlmostDoesNotCrash() {
+        // patch_012: .almost 分岐が確実に実行されることを検証
+        // half(60ms) 経過後に almost に遷移する
+        sut.triggerBlink()
+        XCTAssertEqual(sut.blinkStage, .half)
+
+        let exp = expectation(description: "almost ステージで描画")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            // 60ms 経過後、almost に遷移しているはず
+            XCTAssertEqual(self.sut.blinkStage, .almost, "60ms 後は almost ステージであるべき")
+            self.sut.display()  // .almost 分岐の描画を実行
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
     }
 
     // MARK: - frame 06/07/08 描画状態マッピング
