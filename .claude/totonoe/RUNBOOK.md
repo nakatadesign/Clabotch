@@ -22,6 +22,19 @@ provider 状態も一緒に見たい場合:
 .claude/totonoe/bin/status.sh --job-name sample-feature --provider-state
 ```
 
+急いで止めたい場合は、Claude Code 側で `totonoe stop` と伝えるか、手元で次を実行する。
+
+```bash
+.claude/totonoe/bin/pause_job.sh --job-name sample-feature --reason "user requested stop"
+```
+
+再開するときは、先に paused 状態を戻してから、改めて loop 用プロンプトを生成する。
+
+```bash
+.claude/totonoe/bin/resume_job.sh --job-name sample-feature
+.claude/totonoe/bin/render_loop_prompt.sh --job-name sample-feature
+```
+
 ## 3. Engineer がラウンドを記録する
 
 ```bash
@@ -115,6 +128,7 @@ source .env
 - `runtime/<job>/events.jsonl`
 - `runtime/<job>/rounds/<NNN>/claude_summary.json`
 - `runtime/<job>/rounds/<NNN>/reviewer_aggregate.json`
+- `runtime/<job>/rounds/<NNN>/reviewer_shadow_status.json`（shadow mode 時のみ）
 - `runtime/<job>/rounds/<NNN>/judge.json`
 
 `ai_exec` の監査ログだけ見たい場合:
@@ -132,3 +146,6 @@ jq 'select(.type == "ai_exec")' .claude/totonoe/runtime/sample-feature/events.js
 - `done` を指定しても条件未達なら自動で `human` に降格する
 - `runtime/` は Git 管理しない
 - `provider_state.json` も手動編集しない
+- `flock` が使えない環境では `mkdir` ベースの lock fallback を使う。異常終了で `.job.lock.d` が残った場合は owner PID の生存確認を行い、stale lock を自動回収する
+- shadow mode では primary が Gemini fallback を使った batch の shadow を自動スキップする。`reviewer_shadow_status.json` で各 batch の状態（`success` / `skipped` / `failed`）を確認できる
+- shadow の失敗や欠損で primary の loop が止まることはない

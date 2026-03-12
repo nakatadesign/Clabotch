@@ -306,7 +306,7 @@ acquire_job_lock() {
   ensure_job_exists "${job_name}"
   lock_file="$(job_dir "${job_name}")/.job.lock"
 
-  if command -v flock >/dev/null 2>&1; then
+  if [ "${TOTONOE_FORCE_MKDIR_LOCK:-}" != "1" ] && command -v flock >/dev/null 2>&1; then
     exec {JOB_LOCK_FD}> "${lock_file}"
     flock -x "${JOB_LOCK_FD}" || die "failed to acquire lock"
     JOB_LOCK_MODE="flock"
@@ -317,10 +317,83 @@ acquire_job_lock() {
   JOB_LOCK_MODE="mkdir"
   local attempts=0
   while ! mkdir "${JOB_LOCK_DIR}" 2>/dev/null; do
+    if _try_reclaim_stale_lock "${JOB_LOCK_DIR}"; then
+      continue
+    fi
     attempts=$((attempts + 1))
     [ "${attempts}" -lt 300 ] || die "timed out acquiring lock"
     sleep 0.1
   done
+  _write_lock_metadata "${JOB_LOCK_DIR}"
+}
+
+_write_lock_metadata() {
+  local lock_dir="$1"
+  local meta_file="${lock_dir}/owner.json"
+  if ! jq -nc \
+    --argjson pid "$$" \
+    --arg hostname "$(hostname -s 2>/dev/null || printf 'unknown')" \
+    --arg created_at "$(now_utc)" \
+    '{pid: $pid, hostname: $hostname, created_at: $created_at}' \
+    > "${meta_file}" 2>/dev/null; then
+    rm -rf "${lock_dir}" 2>/dev/null || true
+    die "failed to write lock metadata: ${lock_dir}"
+  fi
+}
+
+_lock_dir_age_seconds() {
+  local lock_dir="$1"
+  local mtime now_epoch
+  if mtime="$(stat -f '%m' "${lock_dir}" 2>/dev/null)"; then
+    :
+  elif mtime="$(stat -c '%Y' "${lock_dir}" 2>/dev/null)"; then
+    :
+  else
+    printf '0\n'
+    return
+  fi
+  now_epoch="$(date -u +%s)"
+  printf '%s\n' "$(( now_epoch - mtime ))"
+}
+
+_LOCK_GRACE_SECONDS=5
+
+_try_reclaim_stale_lock() {
+  local lock_dir="$1"
+  [ -d "${lock_dir}" ] || return 1
+
+  local meta_file="${lock_dir}/owner.json"
+  if [ ! -f "${meta_file}" ]; then
+    local age
+    age="$(_lock_dir_age_seconds "${lock_dir}")"
+    if [ "${age}" -lt "${_LOCK_GRACE_SECONDS}" ]; then
+      return 1
+    fi
+    warn "stale lock detected (no metadata, age ${age}s): ${lock_dir}"
+    rm -rf "${lock_dir}" 2>/dev/null || return 1
+    return 0
+  fi
+
+  local owner_pid
+  owner_pid="$(jq -r '.pid // empty' "${meta_file}" 2>/dev/null)" || true
+  if [ -z "${owner_pid}" ]; then
+    local age
+    age="$(_lock_dir_age_seconds "${lock_dir}")"
+    if [ "${age}" -lt "${_LOCK_GRACE_SECONDS}" ]; then
+      return 1
+    fi
+    warn "stale lock detected (invalid metadata, age ${age}s): ${lock_dir}"
+    rm -rf "${lock_dir}" 2>/dev/null || return 1
+    return 0
+  fi
+
+  if kill -0 "${owner_pid}" 2>/dev/null; then
+    return 1
+  fi
+
+  warn "stale lock detected (pid ${owner_pid} is dead): ${lock_dir}"
+  rm -rf "${lock_dir}" 2>/dev/null || return 1
+  return 0
 }
 
 # config.json のパスを返す
@@ -358,7 +431,10 @@ release_job_lock() {
       JOB_LOCK_FD=""
       ;;
     mkdir)
-      [ -n "${JOB_LOCK_DIR}" ] && rmdir "${JOB_LOCK_DIR}" 2>/dev/null || true
+      if [ -n "${JOB_LOCK_DIR}" ]; then
+        rm -f "${JOB_LOCK_DIR}/owner.json" 2>/dev/null || true
+        rmdir "${JOB_LOCK_DIR}" 2>/dev/null || true
+      fi
       JOB_LOCK_DIR=""
       ;;
     "")
