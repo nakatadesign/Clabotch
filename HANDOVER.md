@@ -5,11 +5,11 @@
 - **MVP**: **完了**（v0.1 相当、設計書 §9 PoC + v0.1 + v0.2 スコープ全達成）
 - **全計画 002〜013**: 完了
 - **active な計画**: なし
-- **CI**: 最後に green 確認: CI #6 `757c55a`。以降のコミットは未 push / 未 CI 検証
+- **CI**: `f42c1e5` まで push 済み。CI run 結果はブラウザ確認待ち（PAT に actions:read 権限なし）
 - **branch protection**: N/A（private repo + GitHub Free では設定不可）
 - **総テスト**: 232 件（231 passed, 1 skipped）+ hook E2E 43 件
 - **totonoe upstream**: 全修正反映済み（`284af6b` + `da95d78`）
-- **最新コミット**: `1824104`
+- **最新コミット**: `f42c1e5`（push 済み）
 
 ---
 
@@ -44,7 +44,7 @@ MVP コア機能は全て実装済み。以下は WORKFLOW.md の優先度ルー
 | 1 | Stop hook error 調査 | バグ修正 | 再現したら着手 |
 | 2 | hook E2E テスト [10] flaky 対策 | 回帰防止テスト | CI で再現した場合 |
 | 3 | BubbleWindow 実環境テスト | テスト容易化 | GUI 環境で手動確認 |
-| 4 | CI push + green 確認 | 小規模ポリッシュ | 計画 011〜013 のコミットを push して CI 通過確認 |
+| 4 | CI green 確認（ブラウザ） | 小規模ポリッシュ | push 済み `f42c1e5`。ブラウザで green 確認待ち |
 | 5 | apply_manager_decision.sh done バグ修正 | バグ修正 | totonoe upstream で対応 |
 | 6 | PAT 権限追加 | 外部依存 | 人間の作業。任意 |
 
