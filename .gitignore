@@ -23,9 +23,8 @@ Package.resolved
 .env.*
 !.env.example
 
-# Artifacts (ビルド成果物は個別に add する)
-artifacts/*.dmg
-artifacts/*.zip
+# Artifacts (ローカル CI 検証の中間成果物)
+artifacts/
 
 # Claude Code local
 .claude/projects/
