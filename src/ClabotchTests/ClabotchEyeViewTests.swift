@@ -22,6 +22,8 @@ final class ClabotchEyeViewTests: XCTestCase {
         XCTAssertFalse(sut.isBlinkClosed)
         XCTAssertFalse(sut.showErrorX)
         XCTAssertFalse(sut.showSurprise)
+        XCTAssertNil(sut.doneAnimPupilFrame)
+        XCTAssertEqual(sut.shakeYOffset, 0)
     }
 
     // MARK: - setGazeFrame
@@ -175,6 +177,116 @@ final class ClabotchEyeViewTests: XCTestCase {
         XCTAssertTrue(sut.showSurprise)
         XCTAssertFalse(sut.isBlinkClosed)
         XCTAssertFalse(sut.showErrorX)
+        sut.display()
+    }
+
+    // MARK: - DONE アニメーション（patch_011）
+
+    func testDoneAnimationStartsWithCenterPupil() {
+        // DONE に遷移した直後、アニメーション初期フレームは中央瞳（frame 08）
+        sut.setPhaseAppearance(phase: .done(elapsedMs: 5000))
+        XCTAssertEqual(sut.doneAnimPupilFrame, .f01_center)
+    }
+
+    func testDoneAnimationSequenceProgresses() {
+        // アニメーションが進行して全ステップを通過することを確認
+        sut.setPhaseAppearance(phase: .done(elapsedMs: 3000))
+
+        let exp = expectation(description: "DONE アニメーション完了")
+        let totalDuration = ClabotchEyeView.doneAnimInterval * Double(ClabotchEyeView.doneAnimSequence.count)
+        DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration + 0.1) {
+            // 最終フレームは f02_rightDown（frame 12）で停止
+            XCTAssertEqual(self.sut.doneAnimPupilFrame, .f02_rightDown)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 2.0)
+    }
+
+    func testDoneAnimationSequenceDefinition() {
+        // アニメーション順が §4 定義（08→09→12→13→14→13→12）に一致
+        let expected: [GazeFrame] = [
+            .f01_center, .f05_rightUp, .f02_rightDown,
+            .f03_leftDown, .f04_leftUp, .f03_leftDown, .f02_rightDown,
+        ]
+        XCTAssertEqual(ClabotchEyeView.doneAnimSequence, expected)
+    }
+
+    func testDoneAnimationStopsOnPhaseChange() {
+        // DONE アニメーション中に idle に遷移するとアニメーションが停止する
+        sut.setPhaseAppearance(phase: .done(elapsedMs: 5000))
+        XCTAssertNotNil(sut.doneAnimPupilFrame)
+
+        sut.setPhaseAppearance(phase: .idle)
+        XCTAssertNil(sut.doneAnimPupilFrame)
+        XCTAssertEqual(sut.shakeYOffset, 0)
+    }
+
+    // MARK: - ERROR シェイクアニメーション（patch_011）
+
+    func testErrorShakeStartsAtZeroOffset() {
+        // ERROR に遷移した直後、Y オフセットは 0（frame 07 通常位置）
+        sut.setPhaseAppearance(phase: .error(toolName: "Bash", message: nil))
+        XCTAssertEqual(sut.shakeYOffset, 0)
+    }
+
+    func testErrorShakeSequenceProgresses() {
+        // シェイクアニメーションが進行して元に戻ることを確認
+        sut.setPhaseAppearance(phase: .error(toolName: "Bash", message: nil))
+
+        let exp = expectation(description: "ERROR シェイク完了")
+        let totalDuration = ClabotchEyeView.errorShakeInterval * Double(ClabotchEyeView.errorShakeSequence.count)
+        DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration + 0.1) {
+            // シェイク完了後は Y オフセットが 0 に戻る
+            XCTAssertEqual(self.sut.shakeYOffset, 0)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 2.0)
+    }
+
+    func testErrorShakeSequenceDefinition() {
+        // シェイク順が §4 定義（07→10→11→10→07）に一致
+        let expected: [CGFloat] = [0, -1, 1, -1, 0]
+        XCTAssertEqual(ClabotchEyeView.errorShakeSequence, expected)
+    }
+
+    func testErrorShakeFrame10MovesUpFrame11MovesDown() {
+        // frame 10（shakeYOffset=-1）は画面上で上方向、
+        // frame 11（shakeYOffset=+1）は画面上で下方向に描画されることを検証。
+        // production の shakeOffsetToViewDY() を直接呼び出して変換結果を確認する。
+        let dot: CGFloat = 1.0
+        let frame10Offset = ClabotchEyeView.errorShakeSequence[1]  // -1
+        let frame11Offset = ClabotchEyeView.errorShakeSequence[2]  // +1
+
+        let dy10 = ClabotchEyeView.shakeOffsetToViewDY(logicalOffset: frame10Offset, dot: dot)
+        let dy11 = ClabotchEyeView.shakeOffsetToViewDY(logicalOffset: frame11Offset, dot: dot)
+
+        XCTAssertGreaterThan(dy10, 0, "frame 10 は AppKit 座標で上方向（正の dy）であるべき")
+        XCTAssertLessThan(dy11, 0, "frame 11 は AppKit 座標で下方向（負の dy）であるべき")
+    }
+
+    func testErrorShakeStopsOnPhaseChange() {
+        // ERROR シェイク中に thinking に遷移するとシェイクが停止する
+        sut.setPhaseAppearance(phase: .error(toolName: "Bash", message: nil))
+
+        sut.setPhaseAppearance(phase: .thinking)
+        XCTAssertEqual(sut.shakeYOffset, 0)
+        XCTAssertNil(sut.doneAnimPupilFrame)
+    }
+
+    // MARK: - アニメーション中の描画がクラッシュしない
+
+    func testDrawDuringDoneAnimationDoesNotCrash() {
+        sut.setPhaseAppearance(phase: .done(elapsedMs: 1000))
+        // アニメーション各ステップで描画
+        for _ in ClabotchEyeView.doneAnimSequence {
+            // 内部状態をシミュレートして描画がクラッシュしないことを確認
+            sut.display()
+        }
+    }
+
+    func testDrawDuringErrorShakeDoesNotCrash() {
+        sut.setPhaseAppearance(phase: .error(toolName: "Bash", message: nil))
+        // シェイク中に描画
         sut.display()
     }
 

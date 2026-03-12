@@ -2,7 +2,7 @@ import AppKit
 
 /// メニューバー上のマスコット描画ビュー。main thread 専用。
 /// PNG 素材ゼロ — 全フレームを Core Graphics で描画。
-/// v11 §3-§4, §8 準拠。
+/// v11 §3-§4, §8 準拠。patch_011 でフレーム 09〜14 追加。
 final class ClabotchEyeView: NSView {
 
     // MARK: - 定数
@@ -23,6 +23,34 @@ final class ClabotchEyeView: NSView {
         static let thinkingDot = NSColor(red: 0x55/255.0, green: 0x77/255.0, blue: 0xAA/255.0, alpha: 1)
     }
 
+    // MARK: - アニメーション定数（patch_011）
+
+    /// DONE アニメーション: 瞳位置の時計回りスピン（§4: 08→09→12→13→14→13→12）
+    static let doneAnimSequence: [GazeFrame] = [
+        .f01_center,    // frame 08: 驚き（中央瞳）
+        .f05_rightUp,   // frame 09: 右上
+        .f02_rightDown, // frame 12: 右下
+        .f03_leftDown,  // frame 13: 左下
+        .f04_leftUp,    // frame 14: 左上（頂点）
+        .f03_leftDown,  // frame 13: 左下（復路）
+        .f02_rightDown, // frame 12: 右下（停止）
+    ]
+
+    /// ERROR アニメーション: 顔全体の Y オフセット（§4: 07→10→11→10→07）
+    static let errorShakeSequence: [CGFloat] = [
+        0,  // frame 07: 通常位置
+        -1, // frame 10: 1dot 上
+        1,  // frame 11: 1dot 下
+        -1, // frame 10: 1dot 上（復路）
+        0,  // frame 07: 通常位置（停止）
+    ]
+
+    /// DONE アニメーション各ステップの間隔
+    static let doneAnimInterval: TimeInterval = 0.12
+
+    /// ERROR アニメーション各ステップの間隔
+    static let errorShakeInterval: TimeInterval = 0.08
+
     // MARK: - 状態（private(set) でテストから参照可能）
 
     private(set) var gazeFrame: GazeFrame = .f02_rightDown
@@ -31,6 +59,20 @@ final class ClabotchEyeView: NSView {
     private(set) var showErrorX: Bool = false
     private(set) var showSurprise: Bool = false
     private var blinkTimer: Timer?
+
+    // MARK: - アニメーション状態（patch_011）
+
+    /// DONE アニメーション中の瞳位置。nil = アニメなし。
+    private(set) var doneAnimPupilFrame: GazeFrame?
+
+    /// ERROR シェイク中の Y オフセット（dot 単位）。0 = 通常位置。
+    private(set) var shakeYOffset: CGFloat = 0
+
+    /// アニメーション駆動タイマー
+    private var animationTimer: Timer?
+
+    /// アニメーション現在ステップ（内部管理用）
+    private var animationStep: Int = 0
 
     // MARK: - Init
 
@@ -44,6 +86,7 @@ final class ClabotchEyeView: NSView {
 
     deinit {
         blinkTimer?.invalidate()
+        animationTimer?.invalidate()
     }
 
     // MARK: - クリック透過（NSStatusBarButton にイベントを委譲）
@@ -79,6 +122,10 @@ final class ClabotchEyeView: NSView {
     /// phase に応じた外見を設定する。AppDelegate が onPhaseChanged で呼ぶ。
     func setPhaseAppearance(phase: MascotPhase) {
         dispatchPrecondition(condition: .onQueue(.main))
+
+        // 前のアニメーションを停止
+        stopAnimation()
+
         switch phase {
         case .idle, .thinking, .working:
             faceColor = Palette.faceNormal
@@ -90,11 +137,13 @@ final class ClabotchEyeView: NSView {
             showErrorX = false
             showSurprise = true
             isBlinkClosed = false
+            startDoneAnimation()
         case .error:
             faceColor = Palette.faceError
             showErrorX = true
             showSurprise = false
             isBlinkClosed = false
+            startErrorShakeAnimation()
         case .sleeping:
             faceColor = Palette.faceSleep
             showErrorX = false
@@ -104,6 +153,71 @@ final class ClabotchEyeView: NSView {
             isBlinkClosed = true  // v11 §6: sleeping は frame06（常時閉じ目）
         }
         needsDisplay = true
+    }
+
+    // MARK: - アニメーション制御（patch_011）
+
+    /// DONE アニメーションを開始する。
+    private func startDoneAnimation() {
+        animationStep = 0
+        doneAnimPupilFrame = Self.doneAnimSequence[0]
+
+        animationTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.doneAnimInterval,
+            repeats: true
+        ) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
+            self.animationStep += 1
+            if self.animationStep < Self.doneAnimSequence.count {
+                self.doneAnimPupilFrame = Self.doneAnimSequence[self.animationStep]
+                self.needsDisplay = true
+            } else {
+                // アニメーション完了 — 最終フレームの瞳位置を維持
+                timer.invalidate()
+                self.animationTimer = nil
+            }
+        }
+    }
+
+    /// ERROR シェイクアニメーションを開始する。
+    private func startErrorShakeAnimation() {
+        animationStep = 0
+        shakeYOffset = Self.errorShakeSequence[0]
+
+        animationTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.errorShakeInterval,
+            repeats: true
+        ) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
+            self.animationStep += 1
+            if self.animationStep < Self.errorShakeSequence.count {
+                self.shakeYOffset = Self.errorShakeSequence[self.animationStep]
+                self.needsDisplay = true
+            } else {
+                // シェイク完了 — オフセットをリセット
+                self.shakeYOffset = 0
+                self.needsDisplay = true
+                timer.invalidate()
+                self.animationTimer = nil
+            }
+        }
+    }
+
+    /// 進行中のアニメーションを停止し状態をリセットする。
+    private func stopAnimation() {
+        animationTimer?.invalidate()
+        animationTimer = nil
+        animationStep = 0
+        doneAnimPupilFrame = nil
+        shakeYOffset = 0
+    }
+
+    // MARK: - 座標変換ヘルパー
+
+    /// 論理 Y オフセット（上が負）を AppKit 座標系（上が正）に変換する。
+    /// テストから直接検証可能にするため static メソッドとして公開。
+    static func shakeOffsetToViewDY(logicalOffset: CGFloat, dot: CGFloat) -> CGFloat {
+        return -logicalOffset * dot
     }
 
     // MARK: - 描画
@@ -118,58 +232,63 @@ final class ClabotchEyeView: NSView {
         let ox = (bounds.width  - Self.canvasWidth  * dot) / 2
         let oy = (bounds.height - Self.canvasHeight * dot) / 2
 
+        // ERROR シェイク: 全描画に Y オフセットを適用（patch_011）
+        let dy = Self.shakeOffsetToViewDY(logicalOffset: shakeYOffset, dot: dot)
+
         // 背景クリア（メニューバーは透明）
         ctx.clear(bounds)
 
         // 顔（16×12 at (3,1)）
-        drawFace(ctx: ctx, dot: dot, ox: ox, oy: oy)
+        drawFace(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
 
         if isBlinkClosed {
             // まばたき / sleeping: 閉じ目（frame06）
-            drawBlinkClosed(ctx: ctx, dot: dot, ox: ox, oy: oy)
+            drawBlinkClosed(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
         } else if showErrorX {
-            // エラー: ×マーク（frame07）
-            drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy)
-            drawErrorX(ctx: ctx, dot: dot, ox: ox, oy: oy)
+            // エラー: ×マーク（frame07 / frame10 / frame11）
+            drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
+            drawErrorX(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
         } else if showSurprise {
-            // 驚き: 中央瞳（frame08）
-            drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy)
-            drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, frame: .f01_center)
+            // DONE アニメーション（frame08〜14）
+            let pupilFrame = doneAnimPupilFrame ?? .f01_center
+            drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
+            drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy, frame: pupilFrame)
         } else {
             // 通常: 目 + 瞳
-            drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy)
-            drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, frame: gazeFrame)
+            drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
+            drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy, frame: gazeFrame)
         }
     }
 
     // MARK: - 描画ヘルパー
 
-    /// dot 単位のピクセル描画。ox/oy は中央配置オフセット。
+    /// dot 単位のピクセル描画。ox/oy は中央配置オフセット。dy は Y オフセット（シェイク用）。
     private func px(_ ctx: CGContext, _ x: CGFloat, _ y: CGFloat,
                     _ w: CGFloat, _ h: CGFloat, _ dot: CGFloat,
-                    ox: CGFloat = 0, oy: CGFloat = 0) {
+                    ox: CGFloat = 0, oy: CGFloat = 0, dy: CGFloat = 0) {
         // v11 §8: dot 単位のピクセル描画
         // NSView は左下原点なので Y を反転する
         let flippedY = Self.canvasHeight - y - h
-        ctx.fill(CGRect(x: x * dot + ox, y: flippedY * dot + oy, width: w * dot, height: h * dot))
+        ctx.fill(CGRect(x: x * dot + ox, y: flippedY * dot + oy + dy, width: w * dot, height: h * dot))
     }
 
-    private func drawFace(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat) {
+    private func drawFace(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {
         ctx.setFillColor(faceColor.cgColor)
         // face: 16×12 at (3, 1)
-        px(ctx, 3, 1, 16, 12, dot, ox: ox, oy: oy)
+        px(ctx, 3, 1, 16, 12, dot, ox: ox, oy: oy, dy: dy)
     }
 
-    private func drawEyeSockets(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat) {
+    private func drawEyeSockets(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {
         ctx.setFillColor(Palette.eyeWhite.cgColor)
         // 左目ソケット: 4×8 at (5, 3)
-        px(ctx, 5, 3, 4, 8, dot, ox: ox, oy: oy)
+        px(ctx, 5, 3, 4, 8, dot, ox: ox, oy: oy, dy: dy)
         // 右目ソケット: 4×8 at (13, 3)
-        px(ctx, 13, 3, 4, 8, dot, ox: ox, oy: oy)
+        px(ctx, 13, 3, 4, 8, dot, ox: ox, oy: oy, dy: dy)
     }
 
     /// v11 §4, §8: フレーム丸ごと切り替え（座標計算禁止）
-    private func drawPupils(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, frame: GazeFrame) {
+    private func drawPupils(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat,
+                            dy: CGFloat = 0, frame: GazeFrame) {
         ctx.setFillColor(Palette.pupil.cgColor)
 
         // 左目ソケット基点: (sx=5, sy=3)
@@ -185,30 +304,30 @@ final class ClabotchEyeView: NSView {
         }()
 
         // 瞳: 2×6
-        px(ctx, lx, ly, 2, 6, dot, ox: ox, oy: oy)
-        px(ctx, rx, ry, 2, 6, dot, ox: ox, oy: oy)
+        px(ctx, lx, ly, 2, 6, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, rx, ry, 2, 6, dot, ox: ox, oy: oy, dy: dy)
     }
 
-    private func drawBlinkClosed(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat) {
+    private func drawBlinkClosed(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {
         // frame06: 閉じ目 — 目のソケット領域に横線を描画
         ctx.setFillColor(Palette.pupil.cgColor)
         // 左目: 4×1 at (5, 7) — ソケットの中央付近
-        px(ctx, 5, 7, 4, 1, dot, ox: ox, oy: oy)
+        px(ctx, 5, 7, 4, 1, dot, ox: ox, oy: oy, dy: dy)
         // 右目: 4×1 at (13, 7) — ソケットの中央付近
-        px(ctx, 13, 7, 4, 1, dot, ox: ox, oy: oy)
+        px(ctx, 13, 7, 4, 1, dot, ox: ox, oy: oy, dy: dy)
     }
 
-    private func drawErrorX(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat) {
+    private func drawErrorX(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {
         ctx.setFillColor(Palette.errorX.cgColor)
         // 左目に × — 対角線を2×2ドットで表現
-        px(ctx, 5, 4, 2, 2, dot, ox: ox, oy: oy)
-        px(ctx, 7, 6, 2, 2, dot, ox: ox, oy: oy)
-        px(ctx, 5, 6, 2, 2, dot, ox: ox, oy: oy)
-        px(ctx, 7, 4, 2, 2, dot, ox: ox, oy: oy)
+        px(ctx, 5, 4, 2, 2, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 7, 6, 2, 2, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 5, 6, 2, 2, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 7, 4, 2, 2, dot, ox: ox, oy: oy, dy: dy)
         // 右目に ×
-        px(ctx, 13, 4, 2, 2, dot, ox: ox, oy: oy)
-        px(ctx, 15, 6, 2, 2, dot, ox: ox, oy: oy)
-        px(ctx, 13, 6, 2, 2, dot, ox: ox, oy: oy)
-        px(ctx, 15, 4, 2, 2, dot, ox: ox, oy: oy)
+        px(ctx, 13, 4, 2, 2, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 15, 6, 2, 2, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 13, 6, 2, 2, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 15, 4, 2, 2, dot, ox: ox, oy: oy, dy: dy)
     }
 }
