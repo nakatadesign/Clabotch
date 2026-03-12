@@ -2,81 +2,66 @@
 
 ## 1. プロジェクト状態
 
+- **MVP**: **完了**（v0.1 相当、設計書 §9 PoC + v0.1 + v0.2 スコープ全達成）
 - **全計画 002〜013**: 完了
 - **active な計画**: なし
-- **CI**: GitHub Actions 全 6 run green（CI #6 `757c55a` 含む）
+- **CI**: 最後に green 確認: CI #6 `757c55a`。以降のコミットは未 push / 未 CI 検証
 - **branch protection**: N/A（private repo + GitHub Free では設定不可）
 - **総テスト**: 232 件（231 passed, 1 skipped）+ hook E2E 43 件
 - **totonoe upstream**: 全修正反映済み（`284af6b` + `da95d78`）
-- **最新コミット**: `5b9d0eb`
+- **最新コミット**: `1824104`
 
 ---
 
-## 2. 前セッションの完了作業
+## 2. MVP 完了サマリー
 
-### 計画 013 — オンボーディング UI（AX 権限ダイアログ）（2026-03-13）
+全 12 計画（002〜013）で以下のコア機能を実装済み:
 
-- §11.7 準拠のオンボーディングダイアログ実装（NSAlert ベース 2 択）
-- 「許可する」→ `requestPermissionIfNeeded()` で System Settings 誘導
-- 「後で」→ notDetermined のまま frame02 固定で続行
-- フラグはダイアログ完了後に書き込み（クラッシュ時再表示可能）
-- alertPresenter テスト seam 導入
-- コミット: `5b9d0eb`
-
-### 計画 012 — まばたき中間フレーム half/almost 7 段階化（2026-03-13）
-
-- patch_012 設計文書策定（`docs/design/patches/patch_012_blink_midframes.md`）
-- BlinkStage enum 導入: open / half / almost / closed
-- `isBlinkClosed: Bool` → `blinkStage: BlinkStage` に置換（computed property で後方互換維持）
-- 7 段階シーケンス: open→half(60ms)→almost(60ms)→closed(90ms)→almost(60ms)→half(60ms)→open（合計 330ms）
-- drawBlinkHalf() / drawBlinkAlmost() 新規描画メソッド追加
-- コミット: `a9752c8`
-
-### 計画 011 — フレーム 09〜14 描画 + DONE/ERROR アニメーション + ジャンプ（2026-03-13）
-
-- frame 09〜14 のピクセル定義を patch 文書で策定（`docs/design/patches/patch_011_frames_09_14.md`）
-- DONE 瞳スピン: 08→09→12→13→14→13→12（時計回り、120ms/step）
-- ERROR シェイク: 07→10→11→10→07（Y ±1dot、80ms/step）
-- ジャンプ: ↑6px→↑12px→↑4px→原点（§5 定義、80ms/step）
-- shakeOffsetToViewDY() ヘルパー切り出し（AppKit Y 座標変換）
-- コミット: `d6bb87e`（フレーム + アニメーション）、`55dc5f1`（ジャンプ）
-
-### 計画 010 — GitHub Actions CI 整備（2026-03-12〜13）
-
-- CI ワークフロー作成・修正・全 run green 確認まで完了
-- xcodegen パス修正 + actions/checkout v6, upload-artifact v7（SHA pin）
-- 計画書を `docs/exec-plans/completed/010-ci-setup.md` に移動済み
-
-### リポジトリ衛生整備
-
-- `.gitignore` に `artifacts/` 追加
-- `run_ai_exec.sh` の `${var:-}` 安全化
-- Co-Authored-By 履歴書き換え（バックアップ: tag `backup/before-coauthor-cleanup-20260312`）
-
-### totonoe バグ修正（upstream 反映済み）
-
-- `run_judge.sh`: `printf -- '- ...'`（`284af6b`）
-- `judge.schema.json`: required フィールド追加（`284af6b`）
-- `run_ai_exec.sh`: `${var:-}` 安全化（`da95d78`）
+| カテゴリ | 実装内容 | 計画 |
+|----------|----------|------|
+| 通信基盤 | HookServer + Unix domain socket + NDJSON | 002 |
+| イベント処理 | EventParser + EventDeduplicator | 003 |
+| 状態管理 | StateMachine（6 フェーズ、所有権ガード、レース対策） | 004 |
+| 視線追跡 | GazeController（AX API + 権限 3 値管理 + フォールバック） | 005 |
+| まばたき | BlinkController + 7 段階シーケンス（330ms） | 005, 012 |
+| 描画 | ClabotchEyeView 14 フレーム（全 Core Graphics） | 006, 011 |
+| アニメーション | DONE スピン + ERROR シェイク + ジャンプ | 011 |
+| 吹き出し | BubbleWindow（ツール名 + 作業時間表示） | 006 |
+| 結線 | CoordinatorBinder（StateMachine ↔ 各コンポーネント） | 007 |
+| 堅牢性 | HookServer 起動失敗時の半初期化修正 | 008 |
+| 調査 | Warp AX 属性ダンプ（unsupportedTerminal で固定視線） | 009 |
+| CI | GitHub Actions（build + hook E2E テスト） | 010 |
+| UX | オンボーディング UI（AX 権限ダイアログ §11.7） | 013 |
 
 ---
 
-## 3. 次フェーズ backlog（優先度順）
+## 3. 次の優先タスク
 
-MVP 実装完成度: **100%**。全コア機能 + アニメーション + まばたき 7 段階化 + オンボーディング UI 完了。
+MVP コア機能は全て実装済み。以下は WORKFLOW.md の優先度ルール（§ Auto Continue）に準拠した順序。
 
-### 次の優先タスク
+| 優先度 | タスク | 種別 | 備考 |
+|--------|--------|------|------|
+| 1 | Stop hook error 調査 | バグ修正 | 再現したら着手 |
+| 2 | hook E2E テスト [10] flaky 対策 | 回帰防止テスト | CI で再現した場合 |
+| 3 | BubbleWindow 実環境テスト | テスト容易化 | GUI 環境で手動確認 |
+| 4 | CI push + green 確認 | 小規模ポリッシュ | 計画 011〜013 のコミットを push して CI 通過確認 |
+| 5 | apply_manager_decision.sh done バグ修正 | バグ修正 | totonoe upstream で対応 |
+| 6 | PAT 権限追加 | 外部依存 | 人間の作業。任意 |
 
-MVP 機能は全て実装済み。残りは条件付きタスクのみ。
+### post-MVP ロードマップ（参考: 設計書 §9）
 
-### 条件付きタスク
+上記の条件付き / 衛生タスク完了後に着手。
 
-| タスク | 着手条件 |
-|--------|---------|
-| Stop hook error 調査 | 再現したら |
-| BubbleWindow 実環境テスト | GUI 環境で手動確認 |
-| hook E2E テスト [10] flaky 対策 | CI で再現した場合 |
-| PAT 権限追加（人間の作業） | 任意。API で CI 確認したい場合 |
+**v0.3 スコープ（複数セッション対応）**
+- MultiSessionStateMachine 実装（displayPriority に基づくフェーズ統合表示）
+- foreign session の本格的な状態可視化（現在は onEphemeralDone 通知のみ）
+- 作業時間表示の改善（ツール未使用セッションの経過時間精度）
+
+**v1.0 スコープ（配布・設定画面）**
+- 設定画面（UI パネル）
+- LaunchAgent 登録（自動起動）
+- Apple Notarization + DMG パッケージング（Developer 証明書が必要）
+- Warp 完全対応（AX 属性確認後に supportedBundles へ昇格）
 
 ---
 
