@@ -86,6 +86,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // UI 初期化（HookServer の成否に依存しない）
         stateMachine.start()          // ① 初期フェーズ emit → setOverride / setBlinking
         gazeController.startPolling() // ② polling 開始
+
+        // §11.7 オンボーディング: 初回起動時のみ AX 権限ダイアログを表示
+        if OnboardingWindowController.shouldShow {
+            OnboardingWindowController.show { [weak self] result in
+                guard let self else { return }
+                switch result {
+                case .allowClicked:
+                    self.gazeController.requestPermissionIfNeeded { _ in }
+                case .laterClicked:
+                    break  // notDetermined のまま続行（frame02 固定）
+                }
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
