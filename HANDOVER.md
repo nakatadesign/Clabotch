@@ -2,17 +2,26 @@
 
 ## 1. プロジェクト状態
 
-- **全計画 002〜011**: 完了
+- **全計画 002〜012**: 完了
 - **active な計画**: なし
 - **CI**: GitHub Actions 全 6 run green（CI #6 `757c55a` 含む）
 - **branch protection**: N/A（private repo + GitHub Free では設定不可）
-- **総テスト**: 220 件（219 passed, 1 skipped）+ hook E2E 43 件
+- **総テスト**: 226 件（225 passed, 1 skipped）+ hook E2E 43 件
 - **totonoe upstream**: 全修正反映済み（`284af6b` + `da95d78`）
-- **最新コミット**: `55dc5f1`
+- **最新コミット**: `a9752c8`
 
 ---
 
 ## 2. 前セッションの完了作業
+
+### 計画 012 — まばたき中間フレーム half/almost 7 段階化（2026-03-13）
+
+- patch_012 設計文書策定（`docs/design/patches/patch_012_blink_midframes.md`）
+- BlinkStage enum 導入: open / half / almost / closed
+- `isBlinkClosed: Bool` → `blinkStage: BlinkStage` に置換（computed property で後方互換維持）
+- 7 段階シーケンス: open→half(60ms)→almost(60ms)→closed(90ms)→almost(60ms)→half(60ms)→open（合計 330ms）
+- drawBlinkHalf() / drawBlinkAlmost() 新規描画メソッド追加
+- コミット: `a9752c8`
 
 ### 計画 011 — フレーム 09〜14 描画 + DONE/ERROR アニメーション + ジャンプ（2026-03-13）
 
@@ -45,20 +54,13 @@
 
 ## 3. 次フェーズ backlog（優先度順）
 
-MVP 実装完成度は約 95%。全コア機能 + DONE/ERROR アニメーション + ジャンプ動作済み。
+MVP 実装完成度は約 98%。全コア機能 + アニメーション + まばたき 7 段階化動作済み。
 
 ### 次の優先タスク
 
-**計画 012: まばたき中間フレーム（half/almost 7 段階化）**
-- 設計書 v11 §4: `open → half(60ms) → almost(60ms) → closed(06/90ms) → almost → half → open`
-- 現在は簡易実装（open → closed(150ms) → open）
-- half / almost の中間フレーム描画 + タイミング調整
-
-### 後続タスク
-
 | 優先度 | タスク | 設計書参照 |
 |--------|--------|-----------|
-| 2 | オンボーディング UI（AX 権限カスタムダイアログ） | §11.7 |
+| 1 | オンボーディング UI（AX 権限カスタムダイアログ） | §11.7 |
 
 ### 条件付きタスク
 
