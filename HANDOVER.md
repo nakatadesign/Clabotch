@@ -1,112 +1,79 @@
 # HANDOVER.md — Clabotch セッション引き継ぎ
 
-## 1. セッション概要
+## 1. プロジェクト状態
 
-- **日時**: 2026-03-12（JST）夜〜深夜
-- **作業目的**: 計画 010（GitHub Actions CI 整備）の完了 + リポジトリ衛生整備
-- **全体進捗**:
-  - 完了: 計画 002〜010（全計画完了）
-  - active な計画: なし
-  - 総テスト: **204 件**（203 passed, 1 skipped）+ hook E2E **43 件**
-  - コード変更の最新コミット: `5044784`（CI 確認対象）
-
----
-
-## 2. 完了した作業
-
-### 2a. 計画 010 — GitHub Actions CI 整備（完了）
-
-| コミット | 内容 |
-|----------|------|
-| `102fd3a` | CI ワークフロー初版（`.xcodegen.lock` + `.github/workflows/ci.yml`） |
-| `c9a47a4` | CI 修正（xcodegen パス + actions Node.js 24 対応） |
-| `93a3d20` | 計画 010 を completed に移動 + HANDOVER 更新 |
-
-#### CI 初回実行で発生した問題と修正
-
-| 問題 | 原因 | 修正 |
-|------|------|------|
-| `Install xcodegen` ステップで exit code 1 | xcodegen.zip 展開後のパスに `xcodegen/` プレフィックスがあり、`xcodegen-bin/bin/xcodegen` が存在しなかった | `xcodegen-bin/xcodegen/bin` に修正 |
-| Node.js 20 deprecation 警告 | actions/checkout v4, upload-artifact v4 が Node.js 20 使用 | v6.0.2, v7.0.0 に更新（SHA pin 維持） |
-
-### 2b. リポジトリ衛生整備
-
-| コミット | 内容 |
-|----------|------|
-| `cd8a503` | `.gitignore` に `artifacts/` 追加 |
-| `5044784` | `run_ai_exec.sh` の `${var:-}` 安全化 |
-
-### 2c. totonoe upstream 反映状況
-
-upstream `/Users/nakata/Claude/totonoe` への反映状況:
-
-| ファイル | 修正内容 | upstream 状態 |
-|----------|---------|--------------|
-| `run_judge.sh` | `printf -- '- ...'` 修正 | 反映済み（`284af6b`） |
-| `judge.schema.json` | `required` に `engineer_type`, `spot_check_required` 追加 | 反映済み（`284af6b`） |
-| `run_ai_exec.sh` | `${var:-}` 安全化 | **未反映** |
-
-### 2d. Co-Authored-By 履歴書き換え
-
-- 直近 4 コミット（`c9a47a4` 〜 `5044784`）から `Co-Authored-By` trailer を除去
-- `--force-with-lease` で push 済み
-- バックアップ: `backup/before-coauthor-cleanup-20260312` タグ
+- **全計画 002〜010**: 完了
+- **active な計画**: なし
+- **CI**: GitHub Actions 全 6 run green（CI #6 `757c55a` 含む）
+- **branch protection**: N/A（private repo + GitHub Free では設定不可）
+- **総テスト**: 204 件（203 passed, 1 skipped）+ hook E2E 43 件
+- **totonoe upstream**: 全修正反映済み（`284af6b` + `da95d78`）
+- **最新コミット**: `757c55a`
 
 ---
 
-## 3. 次のステップ（優先度順）
+## 2. 前セッションの完了作業（2026-03-12〜13）
 
-### 🔴 高優先度（人間の作業）
+### 計画 010 — GitHub Actions CI 整備
 
-1. **CI 実行結果の確認**
-   - URL: `https://github.com/nakatadesign/clabotch/actions`
-   - 確認対象: コード変更 `5044784` を含む CI run（HANDOVER コミットで tip は進むが CI 対象のコード変更はこのコミット）
-   - force push により以前の CI run が無効化されている可能性あり → Actions タブから手動 workflow_dispatch を実行（最新 tip に対して実行される）
-   - **注意**: PAT に `actions:read` 権限がないため API 確認不可。ブラウザで確認
+- CI ワークフロー作成・修正・全 run green 確認まで完了
+- xcodegen パス修正 + actions/checkout v6, upload-artifact v7（SHA pin）
+- 計画書を `docs/exec-plans/completed/010-ci-setup.md` に移動済み
 
-2. **CI green 後: branch protection 設定**（GitHub Settings で手動）
-   - Settings → Branches → main:
-     - Require a pull request before merging
-     - Require status checks: `Build & Test (Swift)` + `Hook E2E Tests`
-     - Do not allow bypassing
+### リポジトリ衛生整備
 
-### 🟡 中優先度
+- `.gitignore` に `artifacts/` 追加
+- `run_ai_exec.sh` の `${var:-}` 安全化
+- Co-Authored-By 履歴書き換え（バックアップ: tag `backup/before-coauthor-cleanup-20260312`）
 
-3. **PAT 権限追加**（任意）
-   - `actions:read` / `checks:read` を追加すれば次回から API で CI 確認可能
+### totonoe バグ修正（upstream 反映済み）
 
-4. **totonoe upstream 追加反映**
-   - `run_ai_exec.sh` の `${var:-}` 修正を `/Users/nakata/Claude/totonoe` に反映
+- `run_judge.sh`: `printf -- '- ...'`（`284af6b`）
+- `judge.schema.json`: required フィールド追加（`284af6b`）
+- `run_ai_exec.sh`: `${var:-}` 安全化（`da95d78`）
 
-### 🟢 低優先度
+---
 
-5. **Stop hook error 調査** — 再現したら着手
-6. **BubbleWindow 実環境テスト** — DI seam でロジックはカバー済み
-7. **hook E2E テスト [10] の flaky 対策** — CI で再現した場合に対応
+## 3. 次フェーズ backlog（優先度順）
+
+MVP 実装完成度は約 85-90%。全コア機能は動作済み。以下は設計書 v11 の MVP スコープ（§12.4）で未実装の項目を優先度順に並べたもの。
+
+### 次の優先タスク
+
+**計画 011: フレーム 09〜14 描画 + DONE/ERROR アニメーション + ジャンプ**
+- 設計書 v11 §4「フレーム一覧（全14枚）」+ §5「ジャンプ（DONEイベント）」
+- 現在 frame 01〜08 まで実装済み、frame 09〜14 が未実装
+- 完了アニメ: frame08→09→12→13→14→13→12（§4 定義）+ ジャンプ（§5）
+- エラーアニメ: frame07→10→11→10→07 シェイク（§4 定義）
+- DONE 吹き出し表示は CoordinatorBinder に実装済み（本計画のスコープ外）
+- MVP スコープ: §12.4 に明記
+
+### 後続タスク
+
+| 優先度 | タスク | 設計書参照 |
+|--------|--------|-----------|
+| 2 | まばたき中間フレーム（half/almost 7 段階化） | §4 blink シーケンス |
+| 3 | オンボーディング UI（AX 権限カスタムダイアログ） | §11.7 |
+
+### 条件付きタスク
+
+| タスク | 着手条件 |
+|--------|---------|
+| Stop hook error 調査 | 再現したら |
+| BubbleWindow 実環境テスト | GUI 環境で手動確認 |
+| hook E2E テスト [10] flaky 対策 | CI で再現した場合 |
+| PAT 権限追加（人間の作業） | 任意。API で CI 確認したい場合 |
 
 ---
 
 ## 4. 環境・依存関係メモ
 
-- **ビルドコマンド**: `cd src && xcodegen generate && xcodebuild test -project Clabotch.xcodeproj -scheme Clabotch -destination 'platform=macOS'`
+- **ビルド**: `cd src && xcodegen generate && xcodebuild test -project Clabotch.xcodeproj -scheme Clabotch -destination 'platform=macOS'`
 - **project.yml**: `src/project.yml`（`src/` で xcodegen 実行必須）
 - **macOS 13+ / Swift 5.9+**
-- **設計書**: 変更禁止。逸脱は `docs/design/patches/` に patch 文書で管理
-- **Git**: main ブランチ。コード変更の最新コミットは `5044784`
-- **PAT**: Fine-grained PAT（リモート URL 埋め込み）。`workflow` スコープ追加済み、`actions:read` は未追加
-- **gh CLI**: `yukinakata` アカウントで認証。`nakatadesign` リポジトリへの API アクセス不可
-- **バックアップタグ**: `backup/before-coauthor-cleanup-20260312` → 書き換え前の `3c9d06b`
-
----
-
-## 残留リスク
-
-| リスク | 対応 |
-|--------|------|
-| CI 実行結果未確認（コード変更 `5044784`） | ブラウザで要確認。force push 後は手動 dispatch が必要かもしれない |
-| branch protection 未設定 | GitHub Settings で手動設定 |
-| totonoe upstream に `run_ai_exec.sh` 未反映 | `/Users/nakata/Claude/totonoe` に `${var:-}` 修正を反映する |
-| hook E2E テスト [10] の flaky | CI で再現したら対応 |
+- **設計書**: `docs/design/current/clabotch_design_doc_v11.md`（変更禁止、逸脱は patches/）
+- **PAT**: Fine-grained PAT（リモート URL 埋め込み）。`workflow` スコープ追加済み
+- **gh CLI**: `yukinakata` アカウント。`nakatadesign` リポジトリへの API アクセス不可
 
 ---
 
