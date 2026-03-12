@@ -290,6 +290,48 @@ final class ClabotchEyeViewTests: XCTestCase {
         sut.display()
     }
 
+    // MARK: - ジャンプアニメーション（§5）
+
+    func testJumpSequenceDefinition() {
+        // §5 定義: ↑6px → ↑12px → ↑4px → 原点
+        let expected: [CGFloat] = [6, 12, 4, 0]
+        XCTAssertEqual(ClabotchEyeView.jumpSequence, expected)
+    }
+
+    func testPerformJumpSetsIsJumping() {
+        sut.performJump()
+        XCTAssertTrue(sut.isJumping)
+    }
+
+    func testJumpAppliesInitialOffset() {
+        sut.performJump()
+        // 初期位置は ↑6px
+        XCTAssertEqual(sut.frame.origin.y, 6)
+    }
+
+    func testJumpCompletesAndResetsToOrigin() {
+        sut.performJump()
+
+        let exp = expectation(description: "ジャンプ完了")
+        let totalDuration = ClabotchEyeView.jumpInterval * Double(ClabotchEyeView.jumpSequence.count)
+        DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration + 0.1) {
+            XCTAssertEqual(self.sut.frame.origin.y, 0, "ジャンプ完了後は原点に戻るべき")
+            XCTAssertFalse(self.sut.isJumping, "ジャンプ完了後は isJumping=false であるべき")
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 2.0)
+    }
+
+    func testJumpStopsOnPhaseChange() {
+        sut.performJump()
+        XCTAssertTrue(sut.isJumping)
+
+        // phase 変更でジャンプが停止する
+        sut.setPhaseAppearance(phase: .idle)
+        XCTAssertFalse(sut.isJumping)
+        XCTAssertEqual(sut.frame.origin.y, 0)
+    }
+
     // MARK: - hitTest 透過
 
     func testHitTestReturnsNil() {

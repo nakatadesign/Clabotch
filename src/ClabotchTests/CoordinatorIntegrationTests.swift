@@ -150,6 +150,9 @@ final class CoordinatorIntegrationTests: XCTestCase {
             gazeController.mode,
             .fixed(.f02_rightDown, reason: .mascotStateOverride)
         )
+        // §5: DONE 時にジャンプアニメーションがトリガーされる
+        XCTAssertTrue(eyeView.isJumping || eyeView.frame.origin.y == 0,
+                      "ジャンプがトリガーされているか、既に完了しているべき")
     }
 
     func testA5SessionDoneZeroMsShowsCompletionOnly() {

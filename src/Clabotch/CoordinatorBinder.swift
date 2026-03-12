@@ -55,6 +55,11 @@ final class CoordinatorBinder {
 
             self.eyeView?.setPhaseAppearance(phase: phase)
 
+            // §5: DONE 時にジャンプアニメーション（DONE スピンとは独立して動作）
+            if case .done = phase {
+                self.eyeView?.performJump()
+            }
+
             if let text = Self.bubbleText(for: phase) {
                 if let anchor = self.anchorProvider() {
                     self.activeBubble.show(text: text, anchor: anchor)

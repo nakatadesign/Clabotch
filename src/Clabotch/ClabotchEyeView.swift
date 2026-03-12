@@ -51,6 +51,12 @@ final class ClabotchEyeView: NSView {
     /// ERROR アニメーション各ステップの間隔
     static let errorShakeInterval: TimeInterval = 0.08
 
+    /// ジャンプアニメーション: Y オフセット（ポイント）のシーケンス（§5 定義）
+    static let jumpSequence: [CGFloat] = [6, 12, 4, 0]
+
+    /// ジャンプアニメーション各ステップの間隔
+    static let jumpInterval: TimeInterval = 0.08
+
     // MARK: - 状態（private(set) でテストから参照可能）
 
     private(set) var gazeFrame: GazeFrame = .f02_rightDown
@@ -74,6 +80,15 @@ final class ClabotchEyeView: NSView {
     /// アニメーション現在ステップ（内部管理用）
     private var animationStep: Int = 0
 
+    /// ジャンプアニメーション中かどうか
+    private(set) var isJumping: Bool = false
+
+    /// ジャンプ駆動タイマー（DONE アニメーションとは独立）
+    private var jumpTimer: Timer?
+
+    /// ジャンプ現在ステップ
+    private var jumpStep: Int = 0
+
     // MARK: - Init
 
     override init(frame: NSRect) {
@@ -87,6 +102,7 @@ final class ClabotchEyeView: NSView {
     deinit {
         blinkTimer?.invalidate()
         animationTimer?.invalidate()
+        jumpTimer?.invalidate()
     }
 
     // MARK: - クリック透過（NSStatusBarButton にイベントを委譲）
@@ -203,13 +219,57 @@ final class ClabotchEyeView: NSView {
         }
     }
 
-    /// 進行中のアニメーションを停止し状態をリセットする。
+    /// ジャンプアニメーションを開始する（§5: ↑6px → ↑12px → ↑4px → 原点）。
+    /// DONE 瞳スピンとは独立して動作する。CoordinatorBinder から呼ばれる。
+    func performJump() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        stopJump()
+        isJumping = true
+        jumpStep = 0
+
+        // 初期位置を適用
+        applyJumpOffset(Self.jumpSequence[0])
+
+        jumpTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.jumpInterval,
+            repeats: true
+        ) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
+            self.jumpStep += 1
+            if self.jumpStep < Self.jumpSequence.count {
+                self.applyJumpOffset(Self.jumpSequence[self.jumpStep])
+            } else {
+                // ジャンプ完了 — 原点に戻す
+                self.applyJumpOffset(0)
+                self.isJumping = false
+                timer.invalidate()
+                self.jumpTimer = nil
+            }
+        }
+    }
+
+    /// ジャンプの Y オフセットを適用する。ビューの frame.origin.y を変更。
+    private func applyJumpOffset(_ offset: CGFloat) {
+        frame.origin.y = offset
+    }
+
+    /// ジャンプアニメーションを停止する。
+    private func stopJump() {
+        jumpTimer?.invalidate()
+        jumpTimer = nil
+        jumpStep = 0
+        isJumping = false
+        frame.origin.y = 0
+    }
+
+    /// 進行中のアニメーション（DONE スピン / ERROR シェイク / ジャンプ）を停止し状態をリセットする。
     private func stopAnimation() {
         animationTimer?.invalidate()
         animationTimer = nil
         animationStep = 0
         doneAnimPupilFrame = nil
         shakeYOffset = 0
+        stopJump()
     }
 
     // MARK: - 座標変換ヘルパー
