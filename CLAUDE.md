@@ -13,57 +13,66 @@
 Swift・macOS・AppKit・Core Graphics・Unix domain socket・API設計の専門家です。
 保守性・パフォーマンス・セキュリティを最優先し、妥協しない。
 
-## Review Loop 運用
+## totonoe 運用
 
-このリポジトリでは、Claude Code が `/loop` の controller になり、shell script 経由で CodexCLI を呼び出して進行を制御できる。
+このリポジトリでは `totonoe` を使って開発ループを回します。Claude Code がコントローラーとなり、シェルスクリプト経由で Codex CLI を呼び出して進行を制御します。ランタイムパスは `.claude/totonoe/` です。
 
-4役構成:
+### 実行モードの前提
 
-- **Manager** (`.claude/agents/manager.md`): review-loop の最終決定・指揮。実装はしない
-- **Analyst** (`run_judge.sh` + `SUPERVISOR.md`): reviewer 結果を集約し recommendation を提示する。最終決定はしない
-- **Engineer** (`swift-engineer.md` / `hook-engineer.md`): 実装専任
-- **Reviewer** (`run_reviewer.sh` + `AGENTS.md`): read-only レビュー
+`totonoe` の長時間ループ運用は、隔離された開発環境で `claude --dangerously-skip-permissions` を使う前提で考えてよい。
+`claude --permission-mode acceptEdits` のような控えめなモードでも、`totonoe` のような定型スクリプト連続実行では確認が残りやすく、長いループでは止まりやすい。
 
-review-loop の補助ファイルは `.claude/review-loop/` 配下にある。
-runtime は `.claude/review-loop/runtime/<job>/` に保存される。
+ただし、これは安全な隔離環境でのみ推奨する。
+本番 credential・個人ファイル・広い権限を持つ環境では、無確認実行を前提にしないこと。
+
+### 4つの役割
+
+- **Manager**（`.claude/agents/manager.md`）: ループの最終決定・指揮を担う。実装は行わない
+- **Analyst**（`run_judge.sh` + `SUPERVISOR.md`）: Reviewer の結果を集約し、推奨アクションを提示する。最終決定はしない
+- **Engineer**（`.claude/agents/swift-engineer.md` / `.claude/agents/hook-engineer.md` を基点に、専門エンジニアへ振り分け）: 実装専任
+- **Reviewer**（`run_reviewer.sh` + `AGENTS.md`）: 読み取り専用でレビューを行う
 
 ### active job の選び方
 
-1. `.claude/review-loop/runtime/*/state.json` を確認する
+1. `.claude/totonoe/runtime/*/state.json` を確認する
 2. `smoke-` で始まる job はテスト用途として無視する
 3. 非 smoke job が 1 件ならそれを active job とする
 4. 非 smoke job が複数ある場合は、ユーザーが会話またはコマンドで job 名を明示指定していなければ、runtime state は更新せずにユーザーにどの job を使うか確認して停止する
-5. 非 smoke job が 0 件なら review-loop は未初期化として扱い、通常の対話フローに戻る
+5. 非 smoke job が 0 件なら totonoe は未初期化として扱い、通常の対話フローに戻る
 
-### /loop 起動後の基本動作
+### /loop 起動後の動作
 
-active job がある場合、各 tick で次を行う。
+有効なジョブがある場合、各ステップで以下を行います。
 
-1. `.claude/review-loop/bin/status.sh --job-name <active-job> --json` を実行して state を読む
-2. `status=done` なら終了してユーザーに完了を報告する
-3. `status=human` なら終了してユーザーに判断待ちを報告する
-4. `status=init` / `fix_requested` / `continue_requested` の場合:
-   - goal と前回 judge 結果を読む
-   - 必要な実装または追加確認を行う
-   - 今回ラウンドの要約 markdown を runtime 配下に保存する
-   - `.claude/review-loop/bin/record_claude_round.sh --job-name <active-job> ...` を実行する
-   - `.claude/review-loop/bin/run_reviewer.sh --job-name <active-job>` を実行する
-   - `.claude/review-loop/bin/run_judge.sh --job-name <active-job>` を実行する
-   - run_judge.sh 実行後は status が `manager_review` になる
-   - Manager エージェント（`.claude/agents/manager.md`）に処理を委譲し、final decision を確定させる
-5. `status=reviewing` で止まっている場合は `.claude/review-loop/bin/run_reviewer.sh --job-name <active-job>` から再開する
-6. `status=judging` で止まっている場合は `.claude/review-loop/bin/run_judge.sh --job-name <active-job>` から再開する
-7. `status=manager_review` で止まっている場合は Manager エージェント（`.claude/agents/manager.md`）に委譲し、final decision を確定させる
+1. `.claude/totonoe/bin/status.sh --job-name <active-job> --json` で現在の状態を確認する
+2. `status=done` なら完了を報告して終了する
+3. `status=human` なら判断待ちを報告して停止する
+4. `status=init / fix_requested / continue_requested` の場合：
+   - 実装または追加確認を行う
+   - サマリーの Markdown を runtime 配下に保存する
+   - `.claude/totonoe/bin/record_claude_round.sh` を実行する
+   - `.claude/totonoe/bin/run_reviewer.sh` を実行する
+   - `.claude/totonoe/bin/run_judge.sh` を実行する
+   - `manager_review` に遷移したら Manager に委譲する
+5. `status=reviewing` なら `run_reviewer.sh` から再開する
+6. `status=judging` なら `run_judge.sh` から再開する
+7. `status=manager_review` なら Manager に委譲し、最終決定を確定する
 
-### review-loop 実行ルール
+### totonoe 実行ルール
 
-- runtime 操作は `.claude/review-loop/bin/*.sh` の shell script だけで行う
+- runtime 操作は `.claude/totonoe/bin/*.sh` の shell script だけで行う
 - 新規セッションや引き継ぎ時は `render_loop_prompt.sh` の出力を最初に貼ることで、job のコマンド一覧と動作手順を確定させる
 - summary markdown は runtime 配下に保存する
 - reviewer / judge の JSON を毎回確認し、重大指摘を優先する
 - 変更は小さく保つ
 - 要求にない大規模リファクタを混ぜない
 - 人手判断が必要な場合は勝手に進めない
+
+## Auto Continue（自動継続ポリシー）
+
+- 各フェーズ完了後、停止条件がなければ HANDOVER.md の backlog から最優先タスクを自動選択して継続する
+- ユーザー確認は blocker がある場合だけ行う
+- 詳細は `docs/WORKFLOW.md` の「Auto Continue」セクションを参照
 
 ## プロジェクト概要
 
