@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+
+jobs:
+  build-and-test:
+    name: Build & Test (Swift)
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Show environment info
+        run: |
+          sw_vers
+          uname -m
+          xcode-select -p
+          xcodebuild -version
+          swift --version
+
+      - name: Install xcodegen (pinned)
+        run: |
+          set -euo pipefail
+          XCODEGEN_VERSION="$(grep '^version:' .xcodegen.lock | awk '{print $2}')"
+          XCODEGEN_SHA256="$(grep '^sha256:' .xcodegen.lock | awk '{print $2}')"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/xcodegen.zip" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          echo "${XCODEGEN_SHA256}  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/xcodegen-bin"
+          unzip -o -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP/xcodegen-bin"
+          echo "$RUNNER_TEMP/xcodegen-bin/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/xcodegen-bin/bin/xcodegen" version
+
+      - name: Create artifacts directory
+        run: mkdir -p artifacts
+
+      - name: Generate Xcode project
+        run: cd src && xcodegen generate
+
+      - name: Check xcodeproj drift
+        run: |
+          set -euo pipefail
+          cd src
+          if ! git diff --exit-code -- Clabotch.xcodeproj; then
+            echo "::error::xcodegen generate produced a different .xcodeproj than what is committed. Run 'cd src && xcodegen generate' locally and commit the result."
+            exit 1
+          fi
+          UNTRACKED="$(git ls-files --others --exclude-standard -- Clabotch.xcodeproj)"
+          if [ -n "$UNTRACKED" ]; then
+            echo "::error::xcodegen generated untracked files in Clabotch.xcodeproj: $UNTRACKED"
+            exit 1
+          fi
+
+      - name: Build for testing
+        run: |
+          cd src
+          xcodebuild build-for-testing \
+            -project Clabotch.xcodeproj \
+            -scheme Clabotch \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath ../artifacts/DerivedData \
+            -resultBundlePath ../artifacts/build.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Test without rebuilding
+        run: |
+          cd src
+          xcodebuild test-without-building \
+            -project Clabotch.xcodeproj \
+            -scheme Clabotch \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath ../artifacts/DerivedData \
+            -resultBundlePath ../artifacts/test.xcresult
+
+      - name: Upload xcresult artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: xcresult-${{ github.run_id }}
+          path: artifacts/*.xcresult
+          retention-days: 7
+
+  hook-tests:
+    name: Hook E2E Tests
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Verify prerequisites
+        run: |
+          set -euo pipefail
+          jq --version
+          bash --version | head -1
+          uuidgen >/dev/null && echo "uuidgen: ok"
+
+      - name: Install dependencies
+        run: brew install socat
+
+      - name: Run hook E2E tests
+        run: bash tests/test_hooks.sh
+
+      - name: Upload test logs on failure
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: hook-test-logs-${{ github.run_id }}
+          path: /tmp/clabotch-test-*
+          retention-days: 7
+          if-no-files-found: ignore
