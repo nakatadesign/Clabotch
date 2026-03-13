@@ -1,163 +1,177 @@
 # HANDOVER.md — Clabotch セッション引き継ぎ
 
-## 1. プロジェクト状態
+## 1. セッション概要
 
-- **MVP**: **完了**（v0.1 相当、設計書 §9 PoC + v0.1 + v0.2 スコープ全達成）
-- **v0.3**: **完了**（計画 014 + BubbleWindow 可視化 + 経過時間精度）
-- **v1.0**: **設定画面の土台 + LaunchAgent 登録 + Notarization/DMG 基盤 完了**
-- **全計画 002〜014**: 完了
-- **active な計画**: なし
-- **CI**: green 確認済み（`8792c5b`）。PAT に actions:read 権限なし（API 確認不可、ブラウザで確認）
-- **branch protection**: N/A（private repo + GitHub Free では設定不可）
-- **総テスト**: 300 件（299 passed, 1 skipped）+ hook E2E 43 件
-- **totonoe upstream**: 全修正反映済み（`284af6b` + `da95d78`）
-- **Codex**: 使用上限到達（Mar 19 まで利用不可）。GEMINI_API_KEY 未設定のため Gemini フォールバックも不可
+- **日時**: 2026-03-13 (JST)
+- **作業目的**: 視線制御の attention モデル実装 + クリック検出 + バグ修正
+- **全体進捗**:
+  - 完了: 6 タスク（attention モデル、クリック検出、override 優先順位修正、スリープ修正、hooks 登録、アプリ切替検出修正）
+  - 進行中: 1 タスク（視線がまだ実環境で動作しない → AX 権限 + hooks 登録の環境設定待ち）
+  - 未着手: 残 backlog タスク
 
 ---
 
-## 2. 計画 014 完了サマリー（MultiSessionStateMachine）
+## 2. 完了した作業
 
-StateMachine を single-session ownership モデルから multi-session 並列追跡モデルに改修:
+### 2a. attention ベース視線制御 (`a7b2af5`)
+常時 AX 追尾をやめ、イベント駆動の attention モデルに移行。フェーズ変更/アプリ切替時のみ 2 秒間一時注視。
+- `src/Clabotch/GazeController.swift` — attentionExpiry, lookAtTerminal(), now: DI
+- `src/Clabotch/GazeTypes.swift` — FixedGazeReason.attentionNeutral 追加
+- `src/Clabotch/CoordinatorBinder.swift` — thinking/working 遷移時に lookAtTerminal() 呼び出し
+- `src/ClabotchTests/GazeControllerTests.swift` — attention テスト 9 件追加
 
-| 変更 | 内容 |
-|------|------|
-| MascotPhase.displayPriority | error(0) > working(1) > thinking(2) > done(3) > idle(4) > sleeping(5) |
-| sessions 辞書化 | `session: SessionState?` → `sessions: [String: SessionState]` |
-| ownership guard 廃止 | 全セッションのイベントを受理 |
-| per-session epoch | セッション間のレース対策を独立化 |
-| 後方互換 session | `.done` 除外 + displayPriority + startedAt ソート |
-| done 遅延削除 | session_done 後もフェーズ表示のためセッション保持 |
-| done セッション保護 | done セッションへの late tool イベントを拒否 |
-| ephemeral 通知 | 非プライマリセッション完了時に onEphemeralDone 発火 |
+### 2b. グローバルクリック検出 (`d46d011`)
+ターミナルウィンドウへのクリックで注視を再開する機能。
+- `src/Clabotch/GazeTypes.swift` — GlobalEventMonitorProviding プロトコル追加
+- `src/Clabotch/AXProvider.swift` — RealGlobalEventMonitor 本番実装 + deinit
+- `src/Clabotch/GazeController.swift` — eventMonitor DI, handleGlobalClick()
+- `src/ClabotchTests/MockProviders.swift` — MockGlobalEventMonitor
+- `src/ClabotchTests/GazeControllerTests.swift` — クリック検出テスト 5 件
+- `docs/design/patches/patch_013_attention_gaze_model.md` — 設計書逸脱記録
 
-Reviewer 指摘 2 件（high: done 復活バグ、medium: 非決定的選択）は Round 2 で修正済み。
+### 2c. attention vs override 優先順位修正 (`1f10164`)
+idle/done の stateOverride が attention を常にブロックしていたバグを修正。
+- `src/Clabotch/GazeTypes.swift` — GazeOverride.fixed に `allowsAttentionOverride` パラメータ追加
+- `src/Clabotch/CoordinatorBinder.swift` — idle/done: true, error/sleeping: false
+- `src/Clabotch/GazeController.swift` — フラグベース優先順位判定
+- テスト 4 件追加（idle override バイパス / error 不変 / sleeping 不変 / 期限切れ復帰）
 
----
+### 2d. アプリ切替検出の位置修正（未コミット）
+update() 内のアプリ切替検出が stateOverride の early return 後にあり、idle 時に到達しなかったバグを修正。
+- `src/Clabotch/GazeController.swift` — アプリ切替検出を override チェックの前に移動
 
-## 2b. BubbleWindow 複数セッション可視化サマリー
+### 2e. スリープ無効化バグ修正 (`e4e88b7`)
+設定でスリープを無効にしても `.sleeping` から戻らなかった問題。
+- `src/Clabotch/StateMachine.swift` — updateSleepThreshold() で sleeping 中の閾値変更を考慮
+- `src/ClabotchTests/SettingsWindowControllerTests.swift` — テスト 2 件追加
 
-複数セッション時にバブルテキストへ `[+N]` サフィックスを付加:
-
-| 変更 | 内容 |
-|------|------|
-| CoordinatorBinder.bubbleText | static → instance メソッド化、sessions.count で [+N] 付加 |
-| StateMachine.onSessionCountChanged | セッション数変化コールバック追加 |
-| scheduleSessionRemoval | 防御チェック追加（sessions 存在確認） |
-| テスト +5件 | I1〜I5: single/multi session バブルテキスト検証 |
-
-表示例: `考えてます... [+1]`、`Bash 実行中... [+2]`
-
-Reviewer Grade A、Manager done。totonoe job: bubblewindow-multisession-visibility
-
----
-
-## 2c. 経過時間表示精度改善サマリー
-
-ツール未使用セッションの elapsed_ms=0 問題を2層で改善:
-
-| 変更 | 内容 |
-|------|------|
-| clabotch_stop.sh | SESSION_START_FILE 不在時に session_start + session_done を1接続送信 |
-| StateMachine.sessionDone | hookElapsedMs==0 + 追跡済み → startedAt フォールバック計算 |
-| テスト +5件 | EF-1〜EF-5: フォールバック計算・優先順位・ephemeral 通知検証 |
-
-Reviewer Grade A、Judge done、Manager done。totonoe job: elapsed-time-accuracy-improvement
+### 2f. Claude Code hooks 登録
+`~/.claude/settings.json` に Clabotch の hooks を登録（未登録だった）。
+- `~/.claude/settings.json` — PreToolUse / PostToolUse / PostToolUseFailure / Stop の 4 hooks
 
 ---
 
-## 2d. 設定画面の土台サマリー
+## 3. 重要な意思決定と理由
 
-v1.0 最初の着手。メニューバーから設定画面を開けるようにし、拡張可能な構成を整備:
+### attention モデルの採用
+- **採用**: イベント駆動の一時注視（attentionExpiry + トリガー方式）
+- **理由**: 常時 AX ポーリングは CPU 効率が悪く、ユーザーが意識していない間もマスコットが追跡し続ける不自然さがあった
+- **却下**: カーソル追跡（設計書の「マウスカーソル追跡」は AX ベースのターミナルウィンドウ追跡として実装）
 
-| 変更 | 内容 |
-|------|------|
-| SettingsStore | UserDefaults ラッパー。sleepTimeoutMinutes/Seconds + onChange |
-| SettingsWindowController | NSWindow + NSStackView。スリープタイムアウト選択 |
-| AppDelegate | メニューに「設定...」追加。SettingsStore → StateMachine 接続 |
-| StateMachine.updateSleepThreshold | sleepThreshold 動的変更 + タイマー再スケジュール |
-| テスト +14件 | SettingsStore 8件 + SettingsWindowController 3件 + updateSleepThreshold 3件 |
+### allowsAttentionOverride フラグ
+- **採用**: GazeOverride.fixed に Bool フラグを追加
+- **理由**: frame の値（f02_rightDown）で idle/done を判定する方法は脆弱。型安全に CoordinatorBinder 側で意図を明示できる
+- **却下**: frame 値による判定（偶然の一致に依存、将来の変更で壊れるリスク）
 
-Reviewer Grade A、Manager done（override）。totonoe job: settings-panel-foundation
-
----
-
-## 2e. LaunchAgent 登録サマリー
-
-ログイン時自動起動を設定画面に追加。SMAppService (macOS 13+) ベース:
-
-| 変更 | 内容 |
-|------|------|
-| LaunchAtLoginManager | LaunchAtLoginProviding プロトコル + SMAppService ラッパー |
-| SettingsWindowController | NSObject 継承追加、チェックボックス UI、エラー時リバート |
-| AppDelegate | LaunchAtLoginManager インスタンス生成・注入 |
-| テスト +9件 | モック 5件 + 設定画面連携 4件 |
-
-NSObject 継承は `@objc` target-action のランタイム動作に必須。
-ヘッドレステスト: `perform(selector, with:)` で windowFactory=nil 環境でもアクション発火。
-
-Reviewer Grade A、Manager done。totonoe job: launchagent-registration
+### GlobalEventMonitorProviding プロトコル
+- **採用**: NSEvent.addGlobalMonitorForEvents の DI 抽象化
+- **理由**: テストで実際の NSEvent モニターを使えないため、MockGlobalEventMonitor で simulateClick() を手動発火
 
 ---
 
-## 2f. Notarization / DMG パッケージング基盤サマリー
+## 4. バグ・問題点と解決策
 
-v1.0 配布準備の土台。Notarization に必要な設定とビルドスクリプトを整備:
+### Bug 1: 視線が動かない（stateOverride が attention をブロック）
+- **原因**: idle/done 状態の stateOverride(.f02_rightDown) が update() の先頭で常に early return
+- **特定方法**: コードトレースで update() の制御フローを追跡
+- **解決**: `allowsAttentionOverride` フラグで idle/done は attention 中にバイパス可能に
 
-| 変更 | 内容 |
-|------|------|
-| Clabotch.entitlements | Hardened Runtime 用 entitlements（Apple Events） |
-| project.yml | MARKETING_VERSION 1.0.0、ENABLE_HARDENED_RUNTIME、Debug/Release 署名分離 |
-| build_release.sh | Release ビルド + DMG + Notarization スクリプト（--unsigned / --notarize） |
-| DISTRIBUTION.md | 配布手順（人間の作業 / 自動化の分離を明記） |
+### Bug 2: アプリ切替検出が idle 時に到達しない
+- **原因**: アプリ切替検出コード（lastFrontmostBundle 比較）が stateOverride の early return の**後**に配置
+- **特定方法**: ログ追加で polling 中のフロー確認
+- **解決**: アプリ切替検出を override チェックの前に移動
 
-人間の残作業: Apple Developer Program 加入 → Developer ID 証明書 → DEVELOPMENT_TEAM 記入 → 署名付きビルド
+### Bug 3: handleGlobalClick のタイミング問題
+- **原因**: クリックイベント発火時、前のアプリがまだ frontmost → supportedBundles に合致しない
+- **対応**: アプリ切替検出（polling ベース）で ≤500ms 以内にカバー。クリックハンドラは既に frontmost なターミナルの再クリック用
 
-Reviewer Grade A、Manager done（force）。totonoe job: notarization-packaging-foundation
+### Bug 4: AX 権限が無効
+- **原因**: ad-hoc 署名の再ビルドで TCC が権限をリセット
+- **対応**: `tccutil reset Accessibility com.clabotch.app` + システム設定で再許可を案内
 
----
-
-## 3. 次の優先タスク
-
-### 直近の修正・機能追加
-
-- **注意（attention）ベース視線制御** (`a7b2af5`): 常時 AX 追尾をやめ、フェーズ変更/ターミナルフロント遷移時のみ 2秒間一時注視する方式に移行
-- **グローバルクリック検出** (`d46d011`): ターミナルウィンドウへのクリックで注視を再開。`GlobalEventMonitorProviding` DI + テスト 5 件。patch_013 追加
-- **attention vs override 優先順位修正** (`1f10164`): idle/done の stateOverride が attention を常にブロックしていた問題を修正。`allowsAttentionOverride` フラグで型安全に制御
-- **スリープ無効化バグ修正** (`e4e88b7`): 設定でスリープを無効にしても `.sleeping` から戻らなかった不具合を修正。`StateMachine.updateSleepThreshold()` で sleeping 中の閾値変更を考慮。
-
-| 優先度 | タスク | 種別 | 備考 |
-|--------|--------|------|------|
-| 1 | Stop hook error 調査 | バグ修正 | 再現したら着手 |
-| 2 | hook E2E テスト [10] flaky 対策 | 回帰防止テスト | CI で再現した場合 |
-| 3 | BubbleWindow 実環境テスト | テスト容易化 | GUI 環境で手動確認 |
-| 4 | PAT 権限追加 | 外部依存 | 人間の作業。任意 |
-| 5 | GEMINI_API_KEY 設定 | 外部依存 | totonoe Gemini フォールバック有効化 |
-
-### v0.3 残タスク
-
-- ~~foreign session の本格的な状態可視化（BubbleWindow 改修）~~ → **完了**（`[+N]` サフィックス + `onSessionCountChanged`）
-- ~~作業時間表示の改善（ツール未使用セッションの経過時間精度）~~ → **完了**（startedAt フォールバック + stop hook 改善）
-
-### v1.0 スコープ（配布・設定画面）
-
-- ~~設定画面（UI パネル）~~ → **土台完了**（SettingsStore + SettingsWindowController）
-- ~~LaunchAgent 登録（自動起動）~~ → **完了**（SMAppService + 設定画面チェックボックス）
-- ~~Apple Notarization + DMG パッケージング~~ → **基盤完了**（スクリプト + 手順整備済み、Developer 証明書待ち）
-- ~~Warp 完全対応~~ → **完了**（計画 009 で AX 検証済み、`dev.warp.Warp-Stable` を supportedBundles に昇格済み）
+### Bug 5: hooks 未登録
+- **原因**: `~/.claude/settings.json` に Clabotch の hooks が設定されていなかった
+- **対応**: 4 つの hook エントリを settings.json に追加。セッション再起動が必要。
 
 ---
 
-## 4. 環境・依存関係メモ
+## 5. 学んだ教訓と落とし穴
+
+1. **update() 内の実行順序**: early return する箇所より前に、常に実行すべきロジックを配置する。override チェックの後にアプリ切替検出を置くと idle 時に到達しない
+2. **NSEvent.addGlobalMonitorForEvents のタイミング**: クリックイベント発火時、フロントアプリの切り替えはまだ完了していない。frontmostBundleIdentifier() は前のアプリを返す
+3. **TCC と ad-hoc 署名**: Debug ビルド（ad-hoc 署名）を再ビルドするたびに AX 権限がリセットされる。ユーザーに再許可を案内する必要がある
+4. **hooks は settings.json に明示登録が必要**: hook スクリプトが存在しても、Claude Code の settings.json に登録しないとイベントが送信されない。hooks はセッション起動時に読み込まれる
+5. **Gemini API / Codex**: 両方とも利用不可（使用上限 / API キー未設定）。totonoe の reviewer/judge は `--force` フラグで Manager 直接レビューに切り替える
+
+---
+
+## 6. 次のステップ（優先度順）
+
+### 🔴 高優先度（ブロッカー）
+
+| タスク | 状態 | 備考 |
+|--------|------|------|
+| AX 権限の再許可 | 人間の作業 | システム設定 → プライバシーとセキュリティ → アクセシビリティで Clabotch を許可 |
+| セッション再起動で hooks 有効化 | 人間の作業 | hooks は起動時に読み込まれるため、現セッション終了→新セッション開始が必要 |
+| アプリ切替検出修正のコミット | 未コミット | `GazeController.swift` のアプリ切替検出位置修正 + デバッグログ |
+
+### 🟡 中優先度
+
+| タスク | 状態 | 備考 |
+|--------|------|------|
+| 実環境での視覚効果確認 | hooks 有効化後 | done スピン / error × マーク / sleeping 閉じ目 が実際に動作するか |
+| デバッグログの削除 | 確認後 | GazeController の `os_log(.info, "[Gaze]...")` を確認後に削除 |
+| GEMINI_API_KEY 設定 | 外部依存 | totonoe Gemini フォールバック有効化 |
+
+### 🟢 低優先度
+
+| タスク | 状態 | 備考 |
+|--------|------|------|
+| Stop hook error 調査 | 再現待ち | 再現したら着手 |
+| hook E2E テスト [10] flaky 対策 | CI 再現待ち | CI で再現した場合 |
+| PAT 権限追加 | 人間の作業 | GitHub API アクセス用。任意 |
+
+---
+
+## 7. 重要ファイルマップ
+
+| ファイル | 役割 | 変更内容 |
+|----------|------|----------|
+| `src/Clabotch/GazeController.swift` | 視線追跡コントローラー | attention モデル、クリック検出、アプリ切替検出位置修正、デバッグログ |
+| `src/Clabotch/GazeTypes.swift` | 視線関連型定義 | attentionNeutral, GlobalEventMonitorProviding, allowsAttentionOverride |
+| `src/Clabotch/CoordinatorBinder.swift` | SM→下流結線 | lookAtTerminal() 呼び出し、allowsAttentionOverride 設定 |
+| `src/Clabotch/AXProvider.swift` | AX/Workspace 抽象化 | RealGlobalEventMonitor 追加 |
+| `src/Clabotch/StateMachine.swift` | 状態管理 | updateSleepThreshold() sleeping→idle 修正 |
+| `src/ClabotchTests/GazeControllerTests.swift` | 視線テスト | attention 9件 + click 5件 + override 4件 = +18件 |
+| `src/ClabotchTests/MockProviders.swift` | テストモック | MockGlobalEventMonitor 追加 |
+| `docs/design/patches/patch_013_attention_gaze_model.md` | 設計書パッチ | attention モデル + allowsAttentionOverride の仕様記録 |
+| `~/.claude/settings.json` | Claude Code 設定 | hooks 4件登録（PreToolUse/PostToolUse/PostToolUseFailure/Stop） |
+
+---
+
+## 8. 環境・依存関係メモ
 
 - **ビルド**: `cd src && xcodegen generate && xcodebuild test -project Clabotch.xcodeproj -scheme Clabotch -destination 'platform=macOS'`
 - **project.yml**: `src/project.yml`（`src/` で xcodegen 実行必須）
 - **macOS 13+ / Swift 5.9+**
 - **設計書**: `docs/design/current/clabotch_design_doc_v11.md`（変更禁止、逸脱は patches/）
+- **総テスト**: 300 件（299 passed, 1 skipped）+ hook E2E 43 件
 - **PAT**: Fine-grained PAT（リモート URL 埋め込み）。`workflow` スコープ追加済み
 - **gh CLI**: `yukinakata` アカウント。`nakatadesign` リポジトリへの API アクセス不可
+- **Codex**: 使用上限到達（Mar 19 まで利用不可）
+- **GEMINI_API_KEY**: 未設定（totonoe Gemini フォールバック不可）
+
+### 設定変更
+
+| 変更 | ファイル | 内容 |
+|------|----------|------|
+| hooks 登録 | `~/.claude/settings.json` | Clabotch の 4 hooks を追加 |
+| TCC リセット | システム | `tccutil reset Accessibility com.clabotch.app` 実行済み |
 
 ---
 
 ## ユーザーフィードバック（次セッション必読）
 
 - **次フェーズ自動選択**: 候補をユーザーに列挙せず、優先度ルールに従い自動で着手する
+- **AX 権限案内**: リビルド後は必ずアクセシビリティ再許可を案内する
+- **hooks 確認**: セッション開始時に `~/.claude/settings.json` の hooks セクションが存在するか確認する

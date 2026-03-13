@@ -163,22 +163,38 @@ final class GazeController {
     /// グローバルクリック検出時の処理。フロントアプリが対応ターミナルなら attention を開始する。
     private func handleGlobalClick() {
         dispatchPrecondition(condition: .onQueue(.main))
-        guard let bundle = workspaceProvider.frontmostBundleIdentifier(),
-              supportedBundles.contains(bundle) else { return }
-        os_log(.debug, "クリック検出: %{public}@ → attention 開始", bundle)
+        let bundle = workspaceProvider.frontmostBundleIdentifier()
+        os_log(.info, "[Gaze] クリック検出: bundle=%{public}@", bundle ?? "nil")
+        guard let bundle, supportedBundles.contains(bundle) else {
+            os_log(.info, "[Gaze] クリック無視: 対応ターミナルではない")
+            return
+        }
+        os_log(.info, "[Gaze] attention 開始: %{public}@", bundle)
         attentionExpiry = now().addingTimeInterval(attentionDuration)
         update()
     }
 
     private func update() {
-        // v8: mascotStateOverride が最優先
-        // ただし allowsAttentionOverride=true（idle/done）は attention 中にスキップしてターミナル追跡を許可する
-        // allowsAttentionOverride=false（error/sleeping）は常に最優先で attention より優先する
+        // アプリ切替検出は常に実行（override/permission チェック前）
+        // idle 時の override で early return しても、ターミナルへの切替を検出できるようにする
+        let currentBundle = workspaceProvider.frontmostBundleIdentifier()
+        if currentBundle != lastFrontmostBundle {
+            lastFrontmostBundle = currentBundle
+            if let bundle = currentBundle, supportedBundles.contains(bundle) {
+                os_log(.info, "[Gaze] アプリ切替検出: %{public}@ → attention 開始", bundle)
+                attentionExpiry = now().addingTimeInterval(attentionDuration)
+            }
+        }
+
+        // stateOverride チェック
+        // allowsAttentionOverride=true（idle/done）は attention 中にバイパスしてターミナル追跡を許可
+        // allowsAttentionOverride=false（error/sleeping）は常に最優先
         if case .fixed(let frame, let reason, let allowsAttention) = stateOverride {
             if !(isAttentionActive && allowsAttention) {
                 applyGaze(.fixed(frame, reason: reason), frame: frame)
                 return
             }
+            os_log(.info, "[Gaze] attention が override をバイパス")
         }
 
         checkPermission()
@@ -186,19 +202,9 @@ final class GazeController {
         guard permissionStatus == .granted else {
             let reason: FixedGazeReason = (permissionStatus == .notDetermined)
                 ? .permissionNotDetermined : .permissionDenied
+            os_log(.info, "[Gaze] 権限なし: %{public}@ → f02_rightDown", String(describing: permissionStatus))
             applyGaze(.fixed(.f02_rightDown, reason: reason), frame: .f02_rightDown)
             return
-        }
-
-        // フロントアプリの bundleID を取得
-        let currentBundle = workspaceProvider.frontmostBundleIdentifier()
-
-        // ターミナルがフロントに来たら注意を開始
-        if currentBundle != lastFrontmostBundle {
-            lastFrontmostBundle = currentBundle
-            if let bundle = currentBundle, supportedBundles.contains(bundle) {
-                attentionExpiry = now().addingTimeInterval(attentionDuration)
-            }
         }
 
         // ① フロントアプリ分類
