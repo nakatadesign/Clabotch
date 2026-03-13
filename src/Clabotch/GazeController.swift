@@ -3,6 +3,11 @@ import os.log
 
 /// 視線追跡コントローラー。main thread 専用。
 /// v11 §11.5 準拠。AX API / NSWorkspace は DI 注入でテスト可能。
+///
+/// 視線はイベント駆動の「注意（attention）」モデルで制御する:
+/// - フェーズ変更やターミナルのフロント遷移で一時的に注視を開始
+/// - 注視期限が切れると neutral position (f01_center) に戻る
+/// - stateOverride（idle/done/error/sleeping）は最優先
 final class GazeController {
 
     // MARK: - 公開状態
@@ -27,9 +32,19 @@ final class GazeController {
     private let workspaceProvider: WorkspaceProvider
     private let pollInterval: TimeInterval
     private var pollTimer: Timer?
+    private let now: () -> Date
 
     /// v8: mascotStateOverride
     private var stateOverride: GazeOverride = .none
+
+    /// 注意（attention）: 一時注視の有効期限
+    private var attentionExpiry: Date?
+
+    /// 注意の持続時間（秒）
+    private let attentionDuration: TimeInterval
+
+    /// 前回ポーリング時のフロントアプリ bundleID（アプリ切替検出用）
+    private var lastFrontmostBundle: String?
 
     /// MVP: 確認済み対応ターミナル
     private let supportedBundles: Set<String> = [
@@ -54,11 +69,15 @@ final class GazeController {
     init(
         axProvider: AXProvider = RealAXProvider(),
         workspaceProvider: WorkspaceProvider = RealWorkspaceProvider(),
-        pollInterval: TimeInterval = 0.5
+        pollInterval: TimeInterval = 0.5,
+        attentionDuration: TimeInterval = 2.0,
+        now: @escaping () -> Date = { Date() }
     ) {
         self.axProvider = axProvider
         self.workspaceProvider = workspaceProvider
         self.pollInterval = pollInterval
+        self.attentionDuration = attentionDuration
+        self.now = now
     }
 
     // MARK: - Public API
@@ -72,6 +91,22 @@ final class GazeController {
             applyGaze(.fixed(frame, reason: reason), frame: frame)
         }
         // .none の場合は次の update() で再計算
+    }
+
+    /// ターミナルウィンドウ方向へ一時的に注視を開始する。
+    /// CoordinatorBinder がフェーズ変更時に呼ぶ。
+    func lookAtTerminal(duration: TimeInterval? = nil) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        let d = duration ?? attentionDuration
+        attentionExpiry = now().addingTimeInterval(d)
+        // 即座に視線を更新（次のポーリングを待たない）
+        update()
+    }
+
+    /// 注意（attention）が有効か
+    var isAttentionActive: Bool {
+        guard let expiry = attentionExpiry else { return false }
+        return now() < expiry
     }
 
     /// ポーリング開始（0.5秒間隔）。
@@ -130,14 +165,31 @@ final class GazeController {
             return
         }
 
+        // フロントアプリの bundleID を取得
+        let currentBundle = workspaceProvider.frontmostBundleIdentifier()
+
+        // ターミナルがフロントに来たら注意を開始
+        if currentBundle != lastFrontmostBundle {
+            lastFrontmostBundle = currentBundle
+            if let bundle = currentBundle, supportedBundles.contains(bundle) {
+                attentionExpiry = now().addingTimeInterval(attentionDuration)
+            }
+        }
+
         // ① フロントアプリ分類
-        if let reason = classifyFrontmostTerminal() {
+        if let reason = classifyFrontmostTerminal(bundleID: currentBundle) {
             let frame: GazeFrame = (reason == .unsupportedTerminal) ? .f02_rightDown : .f01_center
             applyGaze(.fixed(frame, reason: reason), frame: frame)
             return
         }
 
-        // ② AX でウィンドウ位置取得
+        // ② 注意が無効なら neutral position に戻る
+        guard isAttentionActive else {
+            applyGaze(.fixed(.f01_center, reason: .attentionNeutral), frame: .f01_center)
+            return
+        }
+
+        // ③ AX でウィンドウ位置取得（注意が有効な間のみ）
         guard
             let pid = workspaceProvider.frontmostPID(),
             let origin = statusItemCenterProvider?()
@@ -149,15 +201,15 @@ final class GazeController {
             return
         }
 
-        // ③ 量子化
+        // ④ 量子化
         if let target = center {
             let frame = quantize(from: origin, to: target)
             applyGaze(.tracking, frame: frame)
         }
     }
 
-    private func classifyFrontmostTerminal() -> FixedGazeReason? {
-        guard let bundleID = workspaceProvider.frontmostBundleIdentifier() else {
+    private func classifyFrontmostTerminal(bundleID: String?) -> FixedGazeReason? {
+        guard let bundleID else {
             return .terminalNotFound
         }
         if tentativeBundles.contains(bundleID) { return .unsupportedTerminal }

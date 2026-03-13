@@ -50,6 +50,10 @@ final class CoordinatorBinder {
             let override = Self.gazeOverride(for: phase)
             self.gazeController.setOverride(override)
 
+            // thinking/working 遷移時にターミナル方向へ一時注視
+            if case .thinking = phase { self.gazeController.lookAtTerminal() }
+            if case .working = phase { self.gazeController.lookAtTerminal() }
+
             let blinkEnabled = Self.isBlinkEnabled(for: phase)
             self.blinkController.setBlinking(enabled: blinkEnabled)
 

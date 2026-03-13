@@ -25,6 +25,7 @@ enum FixedGazeReason: Equatable {
     case terminalMinimized
     case unsupportedTerminal
     case mascotStateOverride
+    case attentionNeutral
 }
 
 /// 視線モード。GazeController の出力。

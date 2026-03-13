@@ -465,3 +465,185 @@ final class GazeControllerPollingTests: XCTestCase {
         wait(for: [exp], timeout: 1.0)
     }
 }
+
+// MARK: - 6f. Attention（一時注視）テスト
+
+final class GazeControllerAttentionTests: XCTestCase {
+    private var sut: GazeController!
+    private var mockAX: MockAXProvider!
+    private var mockWorkspace: MockWorkspaceProvider!
+    private var currentTime: Date!
+
+    override func setUp() {
+        super.setUp()
+        mockAX = MockAXProvider()
+        mockAX.isTrusted = true
+        mockWorkspace = MockWorkspaceProvider()
+        currentTime = Date()
+        sut = GazeController(
+            axProvider: mockAX,
+            workspaceProvider: mockWorkspace,
+            pollInterval: 0.05,
+            attentionDuration: 0.3,
+            now: { [unowned self] in self.currentTime }
+        )
+        sut.statusItemCenterProvider = { CGPoint(x: 100, y: 10) }
+        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
+    }
+
+    override func tearDown() {
+        sut.stopPolling()
+        sut = nil
+        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
+        super.tearDown()
+    }
+
+    func testLookAtTerminalActivatesAttention() {
+        XCTAssertFalse(sut.isAttentionActive)
+
+        sut.lookAtTerminal()
+
+        XCTAssertTrue(sut.isAttentionActive)
+    }
+
+    func testAttentionExpiresAfterDuration() {
+        sut.lookAtTerminal()
+        XCTAssertTrue(sut.isAttentionActive)
+
+        // 時間を進める（attentionDuration=0.3s を超える）
+        currentTime = currentTime.addingTimeInterval(0.5)
+        XCTAssertFalse(sut.isAttentionActive)
+    }
+
+    func testAttentionTracksDuringWindow() {
+        mockWorkspace.bundleIdentifier = "com.apple.Terminal"
+        mockWorkspace.pid = 1234
+        mockAX.terminalCenter = CGPoint(x: 500, y: 400)
+
+        sut.lookAtTerminal()
+
+        // 注意中 → tracking モード
+        XCTAssertEqual(sut.mode, .tracking)
+    }
+
+    func testAttentionExpiredReturnsToNeutral() {
+        mockWorkspace.bundleIdentifier = "com.apple.Terminal"
+        mockWorkspace.pid = 1234
+        mockAX.terminalCenter = CGPoint(x: 500, y: 400)
+
+        sut.lookAtTerminal()
+        XCTAssertEqual(sut.mode, .tracking)
+
+        // 時間経過 → 注意切れ
+        currentTime = currentTime.addingTimeInterval(0.5)
+        sut.startPolling()
+
+        let exp = expectation(description: "neutral after attention expires")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(self.sut.mode, .fixed(.f01_center, reason: .attentionNeutral))
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+    }
+
+    func testTerminalBecomesFrontmostTriggersAttention() {
+        mockWorkspace.bundleIdentifier = "com.apple.Safari"
+        mockWorkspace.pid = 1234
+
+        sut.startPolling()
+
+        let exp1 = expectation(description: "initial poll runs")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            // Safari → terminalNotFound
+            XCTAssertEqual(self.sut.mode, .fixed(.f01_center, reason: .terminalNotFound))
+
+            // ターミナルに切り替え
+            self.mockWorkspace.bundleIdentifier = "com.apple.Terminal"
+            self.mockAX.terminalCenter = CGPoint(x: 500, y: 400)
+
+            exp1.fulfill()
+        }
+        wait(for: [exp1], timeout: 1.0)
+
+        let exp2 = expectation(description: "attention triggered by app switch")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            // ターミナルへのアプリ切替 → attention → tracking
+            XCTAssertEqual(self.sut.mode, .tracking)
+            XCTAssertTrue(self.sut.isAttentionActive)
+            exp2.fulfill()
+        }
+        wait(for: [exp2], timeout: 1.0)
+    }
+
+    func testOverrideTakesPriorityOverAttention() {
+        mockWorkspace.bundleIdentifier = "com.apple.Terminal"
+        mockWorkspace.pid = 1234
+        mockAX.terminalCenter = CGPoint(x: 500, y: 400)
+
+        // 注意を有効化
+        sut.lookAtTerminal()
+        XCTAssertEqual(sut.mode, .tracking)
+
+        // override が注意より優先
+        sut.setOverride(.fixed(frame: .f01_center, reason: .mascotStateOverride))
+        XCTAssertEqual(sut.mode, .fixed(.f01_center, reason: .mascotStateOverride))
+    }
+
+    func testLookAtTerminalWithCustomDuration() {
+        sut.lookAtTerminal(duration: 1.0)
+        XCTAssertTrue(sut.isAttentionActive)
+
+        // 0.5秒後はまだ有効
+        currentTime = currentTime.addingTimeInterval(0.5)
+        XCTAssertTrue(sut.isAttentionActive)
+
+        // 1.5秒後は期限切れ
+        currentTime = currentTime.addingTimeInterval(1.0)
+        XCTAssertFalse(sut.isAttentionActive)
+    }
+
+    func testConsecutiveLookAtTerminalRefreshesTimer() {
+        sut.lookAtTerminal()
+        XCTAssertTrue(sut.isAttentionActive)
+
+        // 0.2秒経過（残り0.1秒）
+        currentTime = currentTime.addingTimeInterval(0.2)
+
+        // 再度 lookAtTerminal → タイマーがリフレッシュ
+        sut.lookAtTerminal()
+
+        // さらに 0.2秒経過（合計0.4秒）→ 最初の注意なら期限切れだが、リフレッシュ後なのでまだ有効
+        currentTime = currentTime.addingTimeInterval(0.2)
+        XCTAssertTrue(sut.isAttentionActive)
+    }
+
+    func testNoTrackingWithoutAttention() {
+        // ターミナルがフロントだが、初回ポーリング前の状態
+        // lastFrontmostBundle = nil → currentBundle = Terminal → attention 自動発火
+        // なので、ここでは先にポーリングを1回実行して lastFrontmostBundle を設定する
+        mockWorkspace.bundleIdentifier = "com.apple.Terminal"
+        mockWorkspace.pid = 1234
+        mockAX.terminalCenter = CGPoint(x: 500, y: 400)
+
+        sut.startPolling()
+
+        // 初回ポーリングで attention 発火 → tracking
+        let exp1 = expectation(description: "initial tracking")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(self.sut.mode, .tracking)
+            exp1.fulfill()
+        }
+        wait(for: [exp1], timeout: 1.0)
+
+        // 注意を期限切れにする
+        currentTime = currentTime.addingTimeInterval(0.5)
+
+        // ターミナルがフロントのままだが、attention なし → neutral
+        let exp2 = expectation(description: "neutral after expiry")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(self.sut.mode, .fixed(.f01_center, reason: .attentionNeutral))
+            exp2.fulfill()
+        }
+        wait(for: [exp2], timeout: 1.0)
+    }
+}
