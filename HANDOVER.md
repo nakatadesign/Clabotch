@@ -3,12 +3,13 @@
 ## 1. プロジェクト状態
 
 - **MVP**: **完了**（v0.1 相当、設計書 §9 PoC + v0.1 + v0.2 スコープ全達成）
-- **v0.3**: **計画 014 完了** + **BubbleWindow 複数セッション可視化 完了**
+- **v0.3**: **完了**（計画 014 + BubbleWindow 可視化 + 経過時間精度）
+- **v1.0**: **設定画面の土台 完了**
 - **全計画 002〜014**: 完了
 - **active な計画**: なし
 - **CI**: green 確認済み（`8792c5b`）。PAT に actions:read 権限なし（API 確認不可、ブラウザで確認）
 - **branch protection**: N/A（private repo + GitHub Free では設定不可）
-- **総テスト**: 257 件（256 passed, 1 skipped）+ hook E2E 43 件
+- **総テスト**: 271 件（270 passed, 1 skipped）+ hook E2E 43 件
 - **totonoe upstream**: 全修正反映済み（`284af6b` + `da95d78`）
 - **Codex**: 使用上限到達（Mar 19 まで利用不可）。GEMINI_API_KEY 未設定のため Gemini フォールバックも不可
 
@@ -64,6 +65,22 @@ Reviewer Grade A、Judge done、Manager done。totonoe job: elapsed-time-accurac
 
 ---
 
+## 2d. 設定画面の土台サマリー
+
+v1.0 最初の着手。メニューバーから設定画面を開けるようにし、拡張可能な構成を整備:
+
+| 変更 | 内容 |
+|------|------|
+| SettingsStore | UserDefaults ラッパー。sleepTimeoutMinutes/Seconds + onChange |
+| SettingsWindowController | NSWindow + NSStackView。スリープタイムアウト選択 |
+| AppDelegate | メニューに「設定...」追加。SettingsStore → StateMachine 接続 |
+| StateMachine.updateSleepThreshold | sleepThreshold 動的変更 + タイマー再スケジュール |
+| テスト +14件 | SettingsStore 8件 + SettingsWindowController 3件 + updateSleepThreshold 3件 |
+
+Reviewer Grade A、Manager done（override）。totonoe job: settings-panel-foundation
+
+---
+
 ## 3. 次の優先タスク
 
 | 優先度 | タスク | 種別 | 備考 |
@@ -81,8 +98,8 @@ Reviewer Grade A、Judge done、Manager done。totonoe job: elapsed-time-accurac
 
 ### v1.0 スコープ（配布・設定画面）
 
-- 設定画面（UI パネル）
-- LaunchAgent 登録（自動起動）
+- ~~設定画面（UI パネル）~~ → **土台完了**（SettingsStore + SettingsWindowController）
+- LaunchAgent 登録（自動起動）— 設定画面に「ログイン時に起動」トグルを追加予定
 - Apple Notarization + DMG パッケージング（Developer 証明書が必要）
 - Warp 完全対応（AX 属性確認後に supportedBundles へ昇格）
 

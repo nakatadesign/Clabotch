@@ -43,7 +43,7 @@ final class StateMachine {
     // MARK: - Sleep タイマー
 
     private var sleepTimer: Timer?
-    private let sleepThreshold: TimeInterval
+    private(set) var sleepThreshold: TimeInterval
 
     // MARK: - Auto-transition delay
 
@@ -260,6 +260,19 @@ final class StateMachine {
     private func cancelSleepTimer() {
         sleepTimer?.invalidate()
         sleepTimer = nil
+    }
+
+    // MARK: - 設定変更
+
+    /// スリープタイムアウトを動的に変更する。
+    /// .infinity を指定するとスリープ無効。変更後、必要なら sleep タイマーを再スケジュールする。
+    func updateSleepThreshold(_ newThreshold: TimeInterval) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        sleepThreshold = newThreshold
+        cancelSleepTimer()
+        if newThreshold.isFinite {
+            startSleepTimerIfNeeded()
+        }
     }
 }
 

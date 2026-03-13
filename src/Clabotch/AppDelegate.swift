@@ -15,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let bubbleWindow = BubbleWindow()
     private let ephemeralBubbleWindow = BubbleWindow()
     private var binder: CoordinatorBinder?
+    private let settingsStore = SettingsStore()
+    private var settingsWindowController: SettingsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // メニューバー設定（22px 固定幅）
@@ -31,6 +33,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // メニュー構築
         let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: "設定...", action: #selector(openSettings), keyEquivalent: ","))
+        menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit Clabotch", action: #selector(quitApp), keyEquivalent: "q"))
         statusItem?.menu = menu
 
@@ -54,6 +58,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             anchorProvider: { [weak self] in self?.statusItemAnchor() }
         )
         binder?.bind()
+
+        // 設定変更 → StateMachine へ伝播
+        settingsStore.onChange = { [weak self] in
+            guard let self else { return }
+            self.stateMachine.updateSleepThreshold(self.settingsStore.sleepTimeoutSeconds)
+        }
 
         // HookServer 初期化・起動
         let tmpDir = NSTemporaryDirectory().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -84,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // UI 初期化（HookServer の成否に依存しない）
+        stateMachine.updateSleepThreshold(settingsStore.sleepTimeoutSeconds) // 保存済み設定を反映
         stateMachine.start()          // ① 初期フェーズ emit → setOverride / setBlinking
         gazeController.startPolling() // ② polling 開始
 
@@ -107,6 +118,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         blinkController.setBlinking(enabled: false)
         gazeController.stopPolling()
         hookServer?.terminateSync()
+    }
+
+    @objc private func openSettings() {
+        if settingsWindowController == nil {
+            settingsWindowController = SettingsWindowController(settingsStore: settingsStore)
+        }
+        settingsWindowController?.showWindow()
     }
 
     @objc private func quitApp() {

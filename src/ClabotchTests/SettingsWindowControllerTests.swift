@@ -1,0 +1,100 @@
+@testable import Clabotch
+import XCTest
+
+/// SettingsWindowController のテスト。
+/// windowFactory に nil を返すスタブを注入してヘッドレスで動作検証する。
+@MainActor
+final class SettingsWindowControllerTests: XCTestCase {
+
+    private var testDefaults: UserDefaults!
+    private var store: SettingsStore!
+
+    override func setUp() {
+        super.setUp()
+        testDefaults = UserDefaults(suiteName: "com.clabotch.tests.settingsWC")!
+        testDefaults.removePersistentDomain(forName: "com.clabotch.tests.settingsWC")
+        store = SettingsStore(defaults: testDefaults)
+    }
+
+    override func tearDown() {
+        testDefaults.removePersistentDomain(forName: "com.clabotch.tests.settingsWC")
+        super.tearDown()
+    }
+
+    private func makeHeadlessSUT() -> SettingsWindowController {
+        let wc = SettingsWindowController(settingsStore: store)
+        wc.windowFactory = { _ in nil }
+        return wc
+    }
+
+    // MARK: - 基本ライフサイクル
+
+    func testInitialStateNotVisible() {
+        let wc = makeHeadlessSUT()
+        XCTAssertFalse(wc.isVisible)
+    }
+
+    func testShowWindowHeadless() {
+        let wc = makeHeadlessSUT()
+        wc.showWindow()
+        // ヘッドレス（windowFactory=nil）なので isVisible は false のまま
+        XCTAssertFalse(wc.isVisible)
+    }
+
+    func testCloseWithoutShowIsSafe() {
+        let wc = makeHeadlessSUT()
+        wc.close()
+        XCTAssertFalse(wc.isVisible)
+    }
+}
+
+// MARK: - StateMachine.updateSleepThreshold テスト
+
+@MainActor
+final class StateMachineUpdateSleepThresholdTests: XCTestCase {
+
+    func testUpdateSleepThresholdChangesValue() {
+        let sm = StateMachine(sleepThreshold: 300)
+        XCTAssertEqual(sm.sleepThreshold, 300)
+
+        sm.updateSleepThreshold(600)
+        XCTAssertEqual(sm.sleepThreshold, 600)
+    }
+
+    func testUpdateSleepThresholdInfinityDisablesSleep() {
+        let sm = StateMachine(sleepThreshold: 0.1)
+        sm.start()
+
+        // スリープ無効に変更
+        sm.updateSleepThreshold(.infinity)
+
+        // スリープ発火しないことを検証
+        let exp = expectation(description: "no sleep with infinity")
+        exp.isInverted = true
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
+            if sm.displayPhase == .sleeping {
+                timer.invalidate()
+                exp.fulfill()
+            }
+        }
+        waitForExpectations(timeout: 0.3) { _ in timer.invalidate() }
+    }
+
+    func testUpdateSleepThresholdRestartsTimer() {
+        let sm = StateMachine(sleepThreshold: 10)
+        sm.start()
+        XCTAssertEqual(sm.displayPhase, .idle)
+
+        // 短いタイムアウトに変更 → sleep 発火を待つ
+        sm.updateSleepThreshold(0.1)
+
+        let exp = expectation(description: "sleep after threshold update")
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
+            if sm.displayPhase == .sleeping {
+                timer.invalidate()
+                exp.fulfill()
+            }
+        }
+        waitForExpectations(timeout: 1) { _ in timer.invalidate() }
+    }
+}
