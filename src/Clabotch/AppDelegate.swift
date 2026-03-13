@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let ephemeralBubbleWindow = BubbleWindow()
     private var binder: CoordinatorBinder?
     private let settingsStore = SettingsStore()
+    private let launchAtLoginManager = LaunchAtLoginManager()
     private var settingsWindowController: SettingsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -122,7 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openSettings() {
         if settingsWindowController == nil {
-            settingsWindowController = SettingsWindowController(settingsStore: settingsStore)
+            settingsWindowController = SettingsWindowController(settingsStore: settingsStore, launchAtLogin: launchAtLoginManager)
         }
         settingsWindowController?.showWindow()
     }

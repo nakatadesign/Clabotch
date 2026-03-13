@@ -1,8 +1,9 @@
 import AppKit
+import os.log
 
 /// 設定パネルのウィンドウコントローラー。
 /// メニューバーの「設定...」から開かれる。NSStackView ベースのレイアウト。
-final class SettingsWindowController {
+final class SettingsWindowController: NSObject {
 
     // MARK: - DI seam（テスト用）
 
@@ -25,12 +26,17 @@ final class SettingsWindowController {
 
     private var window: NSWindow?
     private let settingsStore: SettingsStore
+    private let launchAtLogin: LaunchAtLoginProviding
 
     /// ポップアップボタン（テスト検証用に公開）
     private(set) var sleepPopup: NSPopUpButton?
+    /// チェックボックス（テスト検証用に公開）
+    private(set) var launchAtLoginCheckbox: NSButton?
 
-    init(settingsStore: SettingsStore) {
+    init(settingsStore: SettingsStore, launchAtLogin: LaunchAtLoginProviding = LaunchAtLoginManager()) {
         self.settingsStore = settingsStore
+        self.launchAtLogin = launchAtLogin
+        super.init()
     }
 
     // MARK: - 表示
@@ -72,6 +78,10 @@ final class SettingsWindowController {
         stack.alignment = .leading
         stack.spacing = 16
         stack.translatesAutoresizingMaskIntoConstraints = false
+
+        // ログイン時自動起動行
+        let launchRow = buildLaunchAtLoginRow()
+        stack.addArrangedSubview(launchRow)
 
         // スリープタイムアウト行
         let sleepRow = buildSleepTimeoutRow()
@@ -120,5 +130,26 @@ final class SettingsWindowController {
     @objc private func sleepTimeoutChanged(_ sender: NSPopUpButton) {
         guard let selectedItem = sender.selectedItem else { return }
         settingsStore.sleepTimeoutMinutes = selectedItem.tag
+    }
+
+    // MARK: - ログイン時自動起動
+
+    private func buildLaunchAtLoginRow() -> NSView {
+        let checkbox = NSButton(checkboxWithTitle: "ログイン時に起動", target: self, action: #selector(launchAtLoginChanged(_:)))
+        checkbox.font = .systemFont(ofSize: 13)
+        checkbox.state = launchAtLogin.isEnabled ? .on : .off
+        launchAtLoginCheckbox = checkbox
+        return checkbox
+    }
+
+    @objc private func launchAtLoginChanged(_ sender: NSButton) {
+        let enabled = sender.state == .on
+        do {
+            try launchAtLogin.setEnabled(enabled)
+        } catch {
+            // 失敗時はチェックを元に戻す
+            sender.state = launchAtLogin.isEnabled ? .on : .off
+            os_log(.error, "LaunchAgent 変更失敗: %{public}@", error.localizedDescription)
+        }
     }
 }
