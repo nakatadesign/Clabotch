@@ -3,61 +3,53 @@
 ## 1. プロジェクト状態
 
 - **MVP**: **完了**（v0.1 相当、設計書 §9 PoC + v0.1 + v0.2 スコープ全達成）
-- **全計画 002〜013**: 完了
+- **v0.3**: **計画 014 実装完了**（MultiSessionStateMachine）
+- **全計画 002〜014**: 完了
 - **active な計画**: なし
 - **CI**: green 確認済み（`8792c5b`）。PAT に actions:read 権限なし（API 確認不可、ブラウザで確認）
 - **branch protection**: N/A（private repo + GitHub Free では設定不可）
-- **総テスト**: 232 件（231 passed, 1 skipped）+ hook E2E 43 件
+- **総テスト**: 247 件（246 passed, 1 skipped）+ hook E2E 43 件
 - **totonoe upstream**: 全修正反映済み（`284af6b` + `da95d78`）
-- **最新コミット**: `a94268b`（push 済み）
+- **Codex**: 使用上限到達（Mar 19 まで利用不可）。GEMINI_API_KEY 未設定のため Gemini フォールバックも不可
 
 ---
 
-## 2. MVP 完了サマリー
+## 2. 計画 014 完了サマリー（MultiSessionStateMachine）
 
-全 12 計画（002〜013）で以下のコア機能を実装済み:
+StateMachine を single-session ownership モデルから multi-session 並列追跡モデルに改修:
 
-| カテゴリ | 実装内容 | 計画 |
-|----------|----------|------|
-| 通信基盤 | HookServer + Unix domain socket + NDJSON | 002 |
-| イベント処理 | EventParser + EventDeduplicator | 003 |
-| 状態管理 | StateMachine（6 フェーズ、所有権ガード、レース対策） | 004 |
-| 視線追跡 | GazeController（AX API + 権限 3 値管理 + フォールバック） | 005 |
-| まばたき | BlinkController + 7 段階シーケンス（330ms） | 005, 012 |
-| 描画 | ClabotchEyeView 14 フレーム（全 Core Graphics） | 006, 011 |
-| アニメーション | DONE スピン + ERROR シェイク + ジャンプ | 011 |
-| 吹き出し | BubbleWindow（ツール名 + 作業時間表示） | 006 |
-| 結線 | CoordinatorBinder（StateMachine ↔ 各コンポーネント） | 007 |
-| 堅牢性 | HookServer 起動失敗時の半初期化修正 | 008 |
-| 調査 | Warp AX 属性ダンプ（unsupportedTerminal で固定視線） | 009 |
-| CI | GitHub Actions（build + hook E2E テスト） | 010 |
-| UX | オンボーディング UI（AX 権限ダイアログ §11.7） | 013 |
+| 変更 | 内容 |
+|------|------|
+| MascotPhase.displayPriority | error(0) > working(1) > thinking(2) > done(3) > idle(4) > sleeping(5) |
+| sessions 辞書化 | `session: SessionState?` → `sessions: [String: SessionState]` |
+| ownership guard 廃止 | 全セッションのイベントを受理 |
+| per-session epoch | セッション間のレース対策を独立化 |
+| 後方互換 session | `.done` 除外 + displayPriority + startedAt ソート |
+| done 遅延削除 | session_done 後もフェーズ表示のためセッション保持 |
+| done セッション保護 | done セッションへの late tool イベントを拒否 |
+| ephemeral 通知 | 非プライマリセッション完了時に onEphemeralDone 発火 |
+
+Reviewer 指摘 2 件（high: done 復活バグ、medium: 非決定的選択）は Round 2 で修正済み。
 
 ---
 
 ## 3. 次の優先タスク
-
-MVP コア機能は全て実装済み。以下は WORKFLOW.md の優先度ルール（§ Auto Continue）に準拠した順序。
 
 | 優先度 | タスク | 種別 | 備考 |
 |--------|--------|------|------|
 | 1 | Stop hook error 調査 | バグ修正 | 再現したら着手 |
 | 2 | hook E2E テスト [10] flaky 対策 | 回帰防止テスト | CI で再現した場合 |
 | 3 | BubbleWindow 実環境テスト | テスト容易化 | GUI 環境で手動確認 |
-| ~~4~~ | ~~CI green 確認~~ | ~~完了~~ | `8792c5b` green 確認済み |
-| ~~5~~ | ~~apply_manager_decision.sh done バグ修正~~ | ~~完了~~ | `a94268b` --force でガード分離 |
-| 6 | PAT 権限追加 | 外部依存 | 人間の作業。任意 |
+| 4 | PAT 権限追加 | 外部依存 | 人間の作業。任意 |
+| 5 | GEMINI_API_KEY 設定 | 外部依存 | totonoe Gemini フォールバック有効化 |
 
-### post-MVP ロードマップ（参考: 設計書 §9）
+### v0.3 残タスク
 
-上記の条件付き / 衛生タスク完了後に着手。
-
-**v0.3 スコープ（複数セッション対応）**
-- MultiSessionStateMachine 実装（displayPriority に基づくフェーズ統合表示）
-- foreign session の本格的な状態可視化（現在は onEphemeralDone 通知のみ）
+- foreign session の本格的な状態可視化（BubbleWindow 改修）
 - 作業時間表示の改善（ツール未使用セッションの経過時間精度）
 
-**v1.0 スコープ（配布・設定画面）**
+### v1.0 スコープ（配布・設定画面）
+
 - 設定画面（UI パネル）
 - LaunchAgent 登録（自動起動）
 - Apple Notarization + DMG パッケージング（Developer 証明書が必要）

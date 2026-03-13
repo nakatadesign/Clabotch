@@ -1,7 +1,38 @@
 import XCTest
 @testable import Clabotch
 
-// MARK: - StateMachineOwnershipTests（Ownership Guard、required 6）
+// MARK: - MascotPhaseDisplayPriorityTests（§12.3 displayPriority）
+
+@MainActor
+final class MascotPhaseDisplayPriorityTests: XCTestCase {
+
+    func testDisplayPriorityOrder() {
+        // error(0) < working(1) < thinking(2) < done(3) < idle(4) < sleeping(5)
+        XCTAssertEqual(MascotPhase.error(toolName: "Bash", message: nil).displayPriority, 0)
+        XCTAssertEqual(MascotPhase.working(toolName: "Read").displayPriority, 1)
+        XCTAssertEqual(MascotPhase.thinking.displayPriority, 2)
+        XCTAssertEqual(MascotPhase.done(elapsedMs: 100).displayPriority, 3)
+        XCTAssertEqual(MascotPhase.idle.displayPriority, 4)
+        XCTAssertEqual(MascotPhase.sleeping.displayPriority, 5)
+    }
+
+    func testErrorHasHighestPriority() {
+        let phases: [MascotPhase] = [
+            .idle, .thinking, .working(toolName: "Read"),
+            .done(elapsedMs: 0), .error(toolName: "Bash", message: nil), .sleeping
+        ]
+        let min = phases.min { $0.displayPriority < $1.displayPriority }
+        XCTAssertEqual(min, .error(toolName: "Bash", message: nil))
+    }
+
+    func testIsDoneHelper() {
+        XCTAssertTrue(MascotPhase.done(elapsedMs: 100).isDone)
+        XCTAssertFalse(MascotPhase.thinking.isDone)
+        XCTAssertFalse(MascotPhase.idle.isDone)
+    }
+}
+
+// MARK: - StateMachineOwnershipTests（Ownership Guard → Multi-session、required 6）
 
 @MainActor
 final class StateMachineOwnershipTests: XCTestCase {
@@ -27,18 +58,21 @@ final class StateMachineOwnershipTests: XCTestCase {
         XCTAssertEqual(sm.session?.sessionID, "s1")
     }
 
-    // 3. active session 中に別 ID の session_start → 無視
-    func testForeignSessionStartIgnored() {
+    // 3. multi-session: 別 ID の session_start は受理される
+    func testSecondSessionStartAccepted() {
         let sm = StateMachine()
         sm.handle(event: .sessionStart(sessionID: "s1"))
-
         sm.handle(event: .sessionStart(sessionID: "s2"))
+        // 両方追跡されている
+        XCTAssertEqual(sm.sessions.count, 2)
+        // displayPhase は thinking（両方 thinking で同一）
         XCTAssertEqual(sm.displayPhase, .thinking)
+        // 後方互換: session は先着（s1）を返す
         XCTAssertEqual(sm.session?.sessionID, "s1")
     }
 
-    // 4. active session 中に別 session_id の tool_start → 無視
-    func testForeignToolStartIgnored() {
+    // 4. active session 中に別 session_id の tool_start → 未追跡なので無視
+    func testToolStartForUnknownSessionIgnored() {
         let sm = StateMachine()
         sm.handle(event: .sessionStart(sessionID: "s1"))
 
@@ -46,8 +80,8 @@ final class StateMachineOwnershipTests: XCTestCase {
         XCTAssertEqual(sm.displayPhase, .thinking)
     }
 
-    // 5. active session 中に別 session_id の tool_end → 無視
-    func testForeignToolEndIgnored() {
+    // 5. active session 中に別 session_id の tool_end → 未追跡なので無視
+    func testToolEndForUnknownSessionIgnored() {
         let sm = StateMachine()
         sm.handle(event: .sessionStart(sessionID: "s1"))
 
@@ -56,8 +90,8 @@ final class StateMachineOwnershipTests: XCTestCase {
         XCTAssertEqual(sm.displayPhase, .thinking)
     }
 
-    // 6. active session 中に別 session_id の session_done(ms==0) → 無視、ephemeral なし
-    func testForeignSessionDoneIgnored() {
+    // 6. 未追跡セッションの session_done(ms==0) → 無視、ephemeral なし
+    func testUnknownSessionDoneIgnored() {
         let sm = StateMachine()
         var ephemeralCount = 0
         sm.onEphemeralDone = { _ in ephemeralCount += 1 }
@@ -81,8 +115,8 @@ final class StateMachinePhaseTests: XCTestCase {
         let sm = StateMachine()
         sm.handle(event: .sessionStart(sessionID: "s1"))
         XCTAssertEqual(sm.displayPhase, .thinking)
-        XCTAssertNotNil(sm.session)
-        XCTAssertEqual(sm.session?.phase, .thinking)
+        XCTAssertNotNil(sm.sessions["s1"])
+        XCTAssertEqual(sm.sessions["s1"]?.phase, .thinking)
     }
 
     // 8. thinking → tool_start → working
@@ -91,7 +125,7 @@ final class StateMachinePhaseTests: XCTestCase {
         sm.handle(event: .sessionStart(sessionID: "s1"))
         sm.handle(event: .toolStart(sessionID: "s1", toolName: "Read"))
         XCTAssertEqual(sm.displayPhase, .working(toolName: "Read"))
-        XCTAssertEqual(sm.session?.phase, .working(toolName: "Read"))
+        XCTAssertEqual(sm.sessions["s1"]?.phase, .working(toolName: "Read"))
     }
 
     // 9. working → tool_end(success) → thinking
@@ -114,13 +148,16 @@ final class StateMachinePhaseTests: XCTestCase {
         XCTAssertEqual(sm.displayPhase, .error(toolName: "Bash", message: "失敗"))
     }
 
-    // 11. thinking → session_done → done + session == nil
+    // 11. thinking → session_done → done + session == nil（後方互換）
     func testSessionDoneSetsDone() {
         let sm = StateMachine(doneAutoTransitionDelay: 10)
         sm.handle(event: .sessionStart(sessionID: "s1"))
         sm.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 3000))
         XCTAssertEqual(sm.displayPhase, .done(elapsedMs: 3000))
+        // session computed property は .done を除外するので nil
         XCTAssertNil(sm.session)
+        // sessions dict には .done として残っている（遅延削除）
+        XCTAssertEqual(sm.sessions["s1"]?.phase, .done(elapsedMs: 3000))
     }
 
     // 12. error → errorAutoTransitionDelay 後 → thinking
@@ -139,7 +176,7 @@ final class StateMachinePhaseTests: XCTestCase {
         wait(for: [exp], timeout: 1)
     }
 
-    // 13. done → doneAutoTransitionDelay 後 → idle
+    // 13. done → doneAutoTransitionDelay 後 → idle（セッション削除）
     func testDoneAutoTransitionToIdle() {
         let sm = StateMachine(doneAutoTransitionDelay: 0.1)
         sm.handle(event: .sessionStart(sessionID: "s1"))
@@ -149,6 +186,8 @@ final class StateMachinePhaseTests: XCTestCase {
         let exp = expectation(description: "auto-transition to idle")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             XCTAssertEqual(sm.displayPhase, .idle)
+            // セッション削除済み
+            XCTAssertTrue(sm.sessions.isEmpty)
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1)
@@ -190,7 +229,7 @@ final class StateMachineRaceTests: XCTestCase {
     }
 
     // 16. done 中に新しい session_start → done auto-transition が発火しない
-    func testEpochInvalidatesStaleTransition() {
+    func testNewSessionCancelsDoneTransition() {
         let sm = StateMachine(doneAutoTransitionDelay: 0.1)
         sm.handle(event: .sessionStart(sessionID: "s1"))
         sm.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 500))
@@ -200,8 +239,8 @@ final class StateMachineRaceTests: XCTestCase {
         sm.handle(event: .sessionStart(sessionID: "s2"))
         XCTAssertEqual(sm.displayPhase, .thinking)
 
-        // 0.1秒後: auto-transition は epoch 不一致で無効
-        let exp = expectation(description: "stale transition invalidated")
+        // 0.1秒後: s1 の removal は発火しても s2 は残る
+        let exp = expectation(description: "new session persists")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             XCTAssertEqual(sm.displayPhase, .thinking)
             XCTAssertEqual(sm.session?.sessionID, "s2")
@@ -210,7 +249,7 @@ final class StateMachineRaceTests: XCTestCase {
         wait(for: [exp], timeout: 1)
     }
 
-    // 17. error → session_done → error auto-transition 無効、done auto-transition のみ発火
+    // 17. error → session_done → error auto-transition 無効、done → idle のみ発火
     func testSessionDoneCancelsPendingErrorTransition() {
         let sm = StateMachine(errorAutoTransitionDelay: 0.15, doneAutoTransitionDelay: 0.1)
         sm.handle(event: .sessionStart(sessionID: "s1"))
@@ -222,7 +261,7 @@ final class StateMachineRaceTests: XCTestCase {
         sm.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 200))
         XCTAssertEqual(sm.displayPhase, .done(elapsedMs: 200))
 
-        // done auto-transition（0.1秒）のみ発火
+        // done removal（0.1秒）のみ発火 → idle
         let exp = expectation(description: "done auto-transition only")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             XCTAssertEqual(sm.displayPhase, .idle)
@@ -231,22 +270,19 @@ final class StateMachineRaceTests: XCTestCase {
         wait(for: [exp], timeout: 1)
     }
 
-    // 18. error auto-transition の expectedSessionID が不一致 → no-op
-    func testPendingTransitionSessionIDMismatch() {
+    // 18. error auto-transition 発火前に session_done + 新セッション → 旧 transition 無効
+    func testPendingTransitionInvalidatedByEpoch() {
         let sm = StateMachine(errorAutoTransitionDelay: 0.1, doneAutoTransitionDelay: 10)
         sm.handle(event: .sessionStart(sessionID: "s1"))
         sm.handle(event: .toolEnd(sessionID: "s1", toolName: "Bash",
                                    durationMs: 100, isError: true, errorMessage: nil))
-        // error auto-transition は expectedSessionID="s1"
 
-        // session_done → done → 新 session_start
         sm.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 0))
         sm.handle(event: .sessionStart(sessionID: "s2"))
         XCTAssertEqual(sm.displayPhase, .thinking)
         XCTAssertEqual(sm.session?.sessionID, "s2")
 
-        // 旧 error auto-transition: epoch 不一致 + sessionID 不一致 → no-op
-        let exp = expectation(description: "sessionID mismatch")
+        let exp = expectation(description: "epoch mismatch invalidates stale transition")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             XCTAssertEqual(sm.displayPhase, .thinking)
             exp.fulfill()
@@ -260,7 +296,7 @@ final class StateMachineRaceTests: XCTestCase {
 @MainActor
 final class StateMachineSleepTests: XCTestCase {
 
-    // 19. idle + session==nil → sleepThreshold 後 → sleeping
+    // 19. idle + sessions 空 → sleepThreshold 後 → sleeping
     func testSleepingFiresAfterThreshold() {
         let sm = StateMachine(sleepThreshold: 0.15)
         sm.start()
@@ -278,14 +314,13 @@ final class StateMachineSleepTests: XCTestCase {
     func testSleepingNotFiresWithActiveSession() {
         let sm = StateMachine(sleepThreshold: 0.1, doneAutoTransitionDelay: 10)
         sm.handle(event: .sessionStart(sessionID: "s1"))
-        // session 存在で thinking → sleep タイマーは始動しない
         sm.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 0))
-        // done に遷移（doneAutoTransitionDelay=10 なので idle にはならない）
+        // done に遷移（doneAutoTransitionDelay=10 なのでセッション残留）
         XCTAssertEqual(sm.displayPhase, .done(elapsedMs: 0))
 
         let exp = expectation(description: "not sleeping")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            // done のまま（idle ではないので sleep タイマー未始動）
+            // done のまま（セッション残留中なので sleep タイマー未始動）
             XCTAssertEqual(sm.displayPhase, .done(elapsedMs: 0))
             exp.fulfill()
         }
@@ -308,14 +343,14 @@ final class StateMachineSleepTests: XCTestCase {
         XCTAssertEqual(sm.displayPhase, .thinking)
     }
 
-    // 22. done → idle auto-transition → sleep タイマー再始動
+    // 22. done → session 削除 → idle → sleep タイマー再始動
     func testSleepTimerRestartsOnReturnToIdle() {
         let sm = StateMachine(sleepThreshold: 0.15, doneAutoTransitionDelay: 0.1)
         sm.handle(event: .sessionStart(sessionID: "s1"))
         sm.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 100))
         XCTAssertEqual(sm.displayPhase, .done(elapsedMs: 100))
 
-        // done → idle (0.1秒) → sleeping (0.15秒)
+        // done → session 削除(0.1秒) → idle → sleeping(0.15秒)
         let exp = expectation(description: "sleep after idle")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             XCTAssertEqual(sm.displayPhase, .sleeping)
@@ -330,8 +365,8 @@ final class StateMachineSleepTests: XCTestCase {
 @MainActor
 final class StateMachineEphemeralTests: XCTestCase {
 
-    // 23. foreign session_done(ms > 0) → onEphemeralDone コールバック
-    func testForeignSessionDoneEphemeral() {
+    // 23. 未追跡セッション session_done(ms > 0) → onEphemeralDone コールバック
+    func testUnknownSessionDoneEphemeral() {
         let sm = StateMachine()
         var receivedMs: Int?
         sm.onEphemeralDone = { ms in receivedMs = ms }
@@ -345,8 +380,8 @@ final class StateMachineEphemeralTests: XCTestCase {
         XCTAssertEqual(sm.session?.sessionID, "s1")
     }
 
-    // 24. foreign session_done(ms == 0) → silent drop
-    func testForeignSessionDoneZeroMsSilentDrop() {
+    // 24. 未追跡セッション session_done(ms == 0) → silent drop
+    func testUnknownSessionDoneZeroMsSilentDrop() {
         let sm = StateMachine()
         var ephemeralCount = 0
         sm.onEphemeralDone = { _ in ephemeralCount += 1 }
@@ -357,7 +392,7 @@ final class StateMachineEphemeralTests: XCTestCase {
         XCTAssertEqual(ephemeralCount, 0)
     }
 
-    // 25. active session_done → onEphemeralDone 呼ばれない
+    // 25. active session_done → onEphemeralDone 呼ばれない（displayPhase が .done）
     func testActiveSessionDoneNoEphemeral() {
         let sm = StateMachine(doneAutoTransitionDelay: 10)
         var ephemeralCount = 0
@@ -410,5 +445,218 @@ final class StateMachineCallbackTests: XCTestCase {
                                    durationMs: 50, isError: false, errorMessage: nil))
 
         XCTAssertEqual(callCount, 0)
+    }
+}
+
+// MARK: - StateMachineMultiSessionTests（複数セッション並列追跡、計画 014）
+
+@MainActor
+final class StateMachineMultiSessionTests: XCTestCase {
+
+    // MS-1. 2 セッション: A=thinking, B=working → displayPhase = .working
+    func testTwoSessionsDisplayPriorityWorking() {
+        let sm = StateMachine()
+        sm.handle(event: .sessionStart(sessionID: "a"))
+        sm.handle(event: .sessionStart(sessionID: "b"))
+        sm.handle(event: .toolStart(sessionID: "b", toolName: "Bash"))
+
+        XCTAssertEqual(sm.sessions["a"]?.phase, .thinking)
+        XCTAssertEqual(sm.sessions["b"]?.phase, .working(toolName: "Bash"))
+        XCTAssertEqual(sm.displayPhase, .working(toolName: "Bash"))
+    }
+
+    // MS-2. 2 セッション: A=error, B=working → displayPhase = .error
+    func testTwoSessionsDisplayPriorityError() {
+        let sm = StateMachine(errorAutoTransitionDelay: 10)
+        sm.handle(event: .sessionStart(sessionID: "a"))
+        sm.handle(event: .sessionStart(sessionID: "b"))
+        sm.handle(event: .toolStart(sessionID: "b", toolName: "Read"))
+        sm.handle(event: .toolEnd(sessionID: "a", toolName: "Bash",
+                                   durationMs: 100, isError: true, errorMessage: "oops"))
+
+        XCTAssertEqual(sm.sessions["a"]?.phase, .error(toolName: "Bash", message: "oops"))
+        XCTAssertEqual(sm.sessions["b"]?.phase, .working(toolName: "Read"))
+        XCTAssertEqual(sm.displayPhase, .error(toolName: "Bash", message: "oops"))
+    }
+
+    // MS-3. セッション A done → B のフェーズが displayPhase に
+    func testSessionDoneRevealsOtherSession() {
+        let sm = StateMachine(doneAutoTransitionDelay: 0.1)
+        sm.handle(event: .sessionStart(sessionID: "a"))
+        sm.handle(event: .sessionStart(sessionID: "b"))
+        sm.handle(event: .toolStart(sessionID: "b", toolName: "Read"))
+        // a=thinking(2), b=working(1) → displayPhase = working
+        XCTAssertEqual(sm.displayPhase, .working(toolName: "Read"))
+
+        sm.handle(event: .sessionDone(sessionID: "b", elapsedMs: 500))
+        // b=done(3), a=thinking(2) → displayPhase = thinking
+        XCTAssertEqual(sm.displayPhase, .thinking)
+        // session（.done 除外）は a
+        XCTAssertEqual(sm.session?.sessionID, "a")
+    }
+
+    // MS-4. 全セッション done → idle（遅延後）
+    func testAllSessionsDoneThenIdle() {
+        let sm = StateMachine(doneAutoTransitionDelay: 0.1)
+        sm.handle(event: .sessionStart(sessionID: "a"))
+        sm.handle(event: .sessionStart(sessionID: "b"))
+        sm.handle(event: .sessionDone(sessionID: "a", elapsedMs: 100))
+        sm.handle(event: .sessionDone(sessionID: "b", elapsedMs: 200))
+        // 両方 done → displayPhase = done（先に完了した a or b の done）
+        XCTAssertTrue(sm.displayPhase.isDone)
+        XCTAssertNil(sm.session)
+
+        let exp = expectation(description: "all sessions removed → idle")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            XCTAssertEqual(sm.displayPhase, .idle)
+            XCTAssertTrue(sm.sessions.isEmpty)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1)
+    }
+
+    // MS-5. 全セッション done → idle → sleep
+    func testAllSessionsDoneThenSleep() {
+        let sm = StateMachine(sleepThreshold: 0.15, doneAutoTransitionDelay: 0.1)
+        sm.handle(event: .sessionStart(sessionID: "a"))
+        sm.handle(event: .sessionDone(sessionID: "a", elapsedMs: 100))
+
+        let exp = expectation(description: "done → idle → sleep")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            XCTAssertEqual(sm.displayPhase, .sleeping)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1)
+    }
+
+    // MS-6. 非プライマリセッション done → ephemeral 通知
+    func testNonPrimarySessionDoneFiresEphemeral() {
+        let sm = StateMachine(doneAutoTransitionDelay: 10)
+        var receivedMs: Int?
+        sm.onEphemeralDone = { ms in receivedMs = ms }
+
+        sm.handle(event: .sessionStart(sessionID: "a"))
+        sm.handle(event: .sessionStart(sessionID: "b"))
+        sm.handle(event: .toolStart(sessionID: "a", toolName: "Read"))
+        // a=working(1), b=thinking(2) → displayPhase = working
+
+        sm.handle(event: .sessionDone(sessionID: "b", elapsedMs: 3000))
+        // b=done(3), a=working(1) → displayPhase = working（.done ではない）
+        // → ephemeral 通知
+        XCTAssertEqual(receivedMs, 3000)
+        XCTAssertEqual(sm.displayPhase, .working(toolName: "Read"))
+    }
+
+    // MS-7. プライマリセッション done → ephemeral 通知なし
+    func testPrimarySessionDoneNoEphemeral() {
+        let sm = StateMachine(doneAutoTransitionDelay: 10)
+        var ephemeralCount = 0
+        sm.onEphemeralDone = { _ in ephemeralCount += 1 }
+
+        sm.handle(event: .sessionStart(sessionID: "a"))
+        // a=thinking → displayPhase = thinking
+
+        sm.handle(event: .sessionDone(sessionID: "a", elapsedMs: 5000))
+        // a=done → displayPhase = done → ephemeral なし
+        XCTAssertEqual(ephemeralCount, 0)
+        XCTAssertEqual(sm.displayPhase, .done(elapsedMs: 5000))
+    }
+
+    // MS-8. セッション A の error auto-transition は B のイベントに影響されない
+    func testPerSessionEpochIsolation() {
+        let sm = StateMachine(errorAutoTransitionDelay: 0.1)
+        sm.handle(event: .sessionStart(sessionID: "a"))
+        sm.handle(event: .sessionStart(sessionID: "b"))
+        sm.handle(event: .toolEnd(sessionID: "a", toolName: "Bash",
+                                   durationMs: 100, isError: true, errorMessage: nil))
+        // a=error(0), b=thinking(2) → displayPhase = error
+        XCTAssertEqual(sm.displayPhase, .error(toolName: "Bash", message: nil))
+
+        // b に新しいイベント → a の pending transition に影響しない
+        sm.handle(event: .toolStart(sessionID: "b", toolName: "Read"))
+        XCTAssertEqual(sm.sessions["b"]?.phase, .working(toolName: "Read"))
+
+        // 0.1秒後: a の error→thinking auto-transition が発火する
+        let exp = expectation(description: "a の auto-transition は b に影響されない")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            XCTAssertEqual(sm.sessions["a"]?.phase, .thinking)
+            // a=thinking(2), b=working(1) → displayPhase = working
+            XCTAssertEqual(sm.displayPhase, .working(toolName: "Read"))
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1)
+    }
+
+    // MS-9. sessions.count と displayPhase の整合性
+    func testSessionsCountConsistency() {
+        let sm = StateMachine(doneAutoTransitionDelay: 10)
+        XCTAssertTrue(sm.sessions.isEmpty)
+        XCTAssertEqual(sm.displayPhase, .idle)
+
+        sm.handle(event: .sessionStart(sessionID: "a"))
+        XCTAssertEqual(sm.sessions.count, 1)
+
+        sm.handle(event: .sessionStart(sessionID: "b"))
+        XCTAssertEqual(sm.sessions.count, 2)
+
+        sm.handle(event: .sessionStart(sessionID: "c"))
+        XCTAssertEqual(sm.sessions.count, 3)
+
+        sm.handle(event: .sessionDone(sessionID: "b", elapsedMs: 0))
+        XCTAssertEqual(sm.sessions.count, 3) // done セッションは遅延削除で残留
+        XCTAssertEqual(sm.displayPhase, .thinking) // a,c が thinking
+    }
+
+    // MS-10. done セッションへの late tool イベントは無視される
+    func testLateToolEventsIgnoredForDoneSession() {
+        let sm = StateMachine(doneAutoTransitionDelay: 10)
+        sm.handle(event: .sessionStart(sessionID: "a"))
+        sm.handle(event: .sessionDone(sessionID: "a", elapsedMs: 1000))
+        XCTAssertEqual(sm.displayPhase, .done(elapsedMs: 1000))
+
+        // done 後に tool_start → 無視
+        sm.handle(event: .toolStart(sessionID: "a", toolName: "Read"))
+        XCTAssertEqual(sm.displayPhase, .done(elapsedMs: 1000))
+        XCTAssertEqual(sm.sessions["a"]?.phase, .done(elapsedMs: 1000))
+
+        // done 後に tool_end → 無視
+        sm.handle(event: .toolEnd(sessionID: "a", toolName: "Bash",
+                                   durationMs: 100, isError: true, errorMessage: "err"))
+        XCTAssertEqual(sm.sessions["a"]?.phase, .done(elapsedMs: 1000))
+    }
+
+    // MS-11. 同一 priority の 2 セッション → 先着のフェーズが displayPhase
+    func testEqualPriorityDeterministicSelection() {
+        let fixedDate = Date(timeIntervalSince1970: 1000)
+        var tick = 0
+        let sm = StateMachine(now: {
+            tick += 1
+            return fixedDate.addingTimeInterval(Double(tick))
+        })
+        sm.handle(event: .sessionStart(sessionID: "a"))  // startedAt = 1001
+        sm.handle(event: .sessionStart(sessionID: "b"))  // startedAt = 1002
+        sm.handle(event: .toolStart(sessionID: "a", toolName: "Read"))
+        sm.handle(event: .toolStart(sessionID: "b", toolName: "Bash"))
+        // 両方 working(1) → 先着(a) の "Read" が displayPhase
+        XCTAssertEqual(sm.displayPhase, .working(toolName: "Read"))
+    }
+
+    // MS-13. 新セッション開始で sleep タイマーキャンセル
+    func testNewSessionCancelsSleepTimer() {
+        let sm = StateMachine(sleepThreshold: 0.1)
+        sm.start()
+        XCTAssertEqual(sm.displayPhase, .idle)
+
+        // sleep 発火前にセッション開始
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            sm.handle(event: .sessionStart(sessionID: "a"))
+        }
+
+        let exp = expectation(description: "sleep タイマーがキャンセルされる")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            XCTAssertEqual(sm.displayPhase, .thinking)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1)
     }
 }

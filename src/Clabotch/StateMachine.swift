@@ -3,22 +3,36 @@ import os.log
 
 /// ClabotchEvent を受けて MascotPhase を遷移させるステートマシン。
 /// main thread 専用。AppDelegate が所有するグローバル 1 インスタンス。
+/// v0.3: 複数セッションを並列追跡し、displayPriority で表示フェーズを決定する。
 final class StateMachine {
 
     // MARK: - 公開状態
 
-    private(set) var session: SessionState?
+    /// 全セッションの状態。セッション ID でキー。
+    private(set) var sessions: [String: SessionState] = [:]
+
+    /// 表示フェーズ。全セッションの中で最も優先度が高いフェーズ。
+    /// セッションが空なら .idle。
     private(set) var displayPhase: MascotPhase = .idle
+
+    /// 後方互換: 最も優先度が高いアクティブセッション（.done を除く）を返す。
+    var session: SessionState? {
+        sessions.values
+            .filter { !$0.phase.isDone }
+            .min { $0.phase.displayPriority < $1.phase.displayPriority
+                   || ($0.phase.displayPriority == $1.phase.displayPriority
+                       && $0.startedAt < $1.startedAt) }
+    }
 
     // MARK: - コールバック
 
     var onPhaseChanged: ((MascotPhase) -> Void)?
     var onEphemeralDone: ((Int) -> Void)?
 
-    // MARK: - レース対策
+    // MARK: - レース対策（セッション単位）
 
-    private var transitionEpoch: UInt = 0
-    private var pendingTransition: DispatchWorkItem?
+    private var sessionEpochs: [String: UInt] = [:]
+    private var pendingTransitions: [String: DispatchWorkItem] = [:]
 
     // MARK: - Sleep タイマー
 
@@ -58,153 +72,175 @@ final class StateMachine {
     // MARK: - イベント処理
 
     /// ClabotchEvent を受けて phase 遷移を行う。main thread 限定。
+    /// 全セッションのイベントを受理する（ownership guard 廃止）。
     func handle(event: ClabotchEvent) {
         dispatchPrecondition(condition: .onQueue(.main))
 
-        // Step 1: Ownership 判定（副作用ゼロ）
-        guard isOwned(event) else {
-            handleForeign(event)
-            return
-        }
-
-        // Step 2: 副作用適用（owned 確定後のみ）
-        transitionEpoch &+= 1
-        pendingTransition?.cancel()
-        pendingTransition = nil
-        cancelSleepTimer()
-
-        // Step 3: 状態遷移
         let currentDate = now()
+
         switch event {
         case .sessionStart(let sessionID):
-            session = SessionState(
+            // 重複 session_start は no-op（§14.3 不変条件 4）
+            guard sessions[sessionID] == nil else { return }
+            cancelSleepTimer()
+            sessions[sessionID] = SessionState(
                 sessionID: sessionID,
                 phase: .thinking,
                 startedAt: currentDate,
                 lastEventAt: currentDate
             )
-            transition(to: .thinking)
+            sessionEpochs[sessionID] = 0
+            recalculateDisplayPhase()
 
-        case .toolStart(_, let toolName):
-            session?.lastEventAt = currentDate
-            session?.phase = .working(toolName: toolName)
-            transition(to: .working(toolName: toolName))
+        case .toolStart(let sessionID, let toolName):
+            guard let s = sessions[sessionID], !s.phase.isDone else { return }
+            bumpEpoch(for: sessionID)
+            sessions[sessionID]?.lastEventAt = currentDate
+            sessions[sessionID]?.phase = .working(toolName: toolName)
+            recalculateDisplayPhase()
 
         case .toolEnd(let sessionID, let toolName, _, let isError, let errorMessage):
-            session?.lastEventAt = currentDate
+            guard let s = sessions[sessionID], !s.phase.isDone else { return }
+            bumpEpoch(for: sessionID)
+            sessions[sessionID]?.lastEventAt = currentDate
             if isError {
                 let p = MascotPhase.error(toolName: toolName, message: errorMessage)
-                session?.phase = p
-                transition(to: p)
-                scheduleAutoTransition(to: .thinking, after: errorAutoTransitionDelay,
-                                       expectedSessionID: sessionID)
+                sessions[sessionID]?.phase = p
+                recalculateDisplayPhase()
+                scheduleAutoTransition(
+                    for: sessionID, toPhase: .thinking,
+                    after: errorAutoTransitionDelay
+                )
             } else {
-                session?.phase = .thinking
-                transition(to: .thinking)
+                sessions[sessionID]?.phase = .thinking
+                recalculateDisplayPhase()
             }
 
-        case .sessionDone(_, let elapsedMs):
-            session = nil
-            transition(to: .done(elapsedMs: elapsedMs))
-            scheduleAutoTransition(to: .idle, after: doneAutoTransitionDelay,
-                                   expectedSessionID: nil)
+        case .sessionDone(let sessionID, let elapsedMs):
+            // 未追跡セッション: ephemeral 通知のみ
+            guard sessions[sessionID] != nil else {
+                if elapsedMs > 0 {
+                    onEphemeralDone?(elapsedMs)
+                }
+                return
+            }
+            bumpEpoch(for: sessionID)
+            sessions[sessionID]?.lastEventAt = currentDate
+            sessions[sessionID]?.phase = .done(elapsedMs: elapsedMs)
+            recalculateDisplayPhase()
+            scheduleSessionRemoval(for: sessionID, after: doneAutoTransitionDelay)
+
+            // 非プライマリセッションの完了: ephemeral 通知
+            // displayPhase が .done でない場合、より高優先のセッションが表示中なので
+            // ephemeral bubble でユーザーに通知する
+            if !displayPhase.isDone, elapsedMs > 0 {
+                onEphemeralDone?(elapsedMs)
+            }
 
         case .unknown:
             break
         }
     }
 
-    // MARK: - Ownership Guard
+    // MARK: - セッション epoch 管理
 
-    private func isOwned(_ event: ClabotchEvent) -> Bool {
-        switch event {
-        case .sessionStart:
-            return session == nil
-        case .toolStart(let id, _),
-             .toolEnd(let id, _, _, _, _),
-             .sessionDone(let id, _):
-            return isActiveSession(id)
-        case .unknown:
-            return false
+    private func bumpEpoch(for sessionID: String) {
+        cancelPendingTransition(for: sessionID)
+        sessionEpochs[sessionID, default: 0] &+= 1
+    }
+
+    private func cancelPendingTransition(for sessionID: String) {
+        pendingTransitions[sessionID]?.cancel()
+        pendingTransitions.removeValue(forKey: sessionID)
+    }
+
+    // MARK: - Auto-transition（遅延遷移、セッション単位）
+
+    private func scheduleAutoTransition(
+        for sessionID: String,
+        toPhase phase: MascotPhase,
+        after delay: TimeInterval
+    ) {
+        let epoch = sessionEpochs[sessionID] ?? 0
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard self.sessionEpochs[sessionID] == epoch else { return }
+            self.sessions[sessionID]?.phase = phase
+            self.pendingTransitions.removeValue(forKey: sessionID)
+            self.recalculateDisplayPhase()
         }
+        pendingTransitions[sessionID] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    private func isActiveSession(_ id: String) -> Bool {
-        session?.sessionID == id
+    /// session_done 後の遅延セッション削除。
+    private func scheduleSessionRemoval(for sessionID: String, after delay: TimeInterval) {
+        let epoch = sessionEpochs[sessionID] ?? 0
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard self.sessionEpochs[sessionID] == epoch else { return }
+            self.sessions.removeValue(forKey: sessionID)
+            self.sessionEpochs.removeValue(forKey: sessionID)
+            self.pendingTransitions.removeValue(forKey: sessionID)
+            self.recalculateDisplayPhase()
+        }
+        pendingTransitions[sessionID] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
-    // MARK: - Foreign Event
+    // MARK: - displayPhase 再計算
 
-    private func handleForeign(_ event: ClabotchEvent) {
-        switch event {
-        case .sessionDone(_, let elapsedMs):
-            guard elapsedMs > 0 else { return }
-            onEphemeralDone?(elapsedMs)
-        case .sessionStart(let id):
-            if session?.sessionID == id {
-                os_log(.debug, "重複 session_start（no-op）: %{public}@", id)
-            } else {
-                os_log(.debug, "foreign session_start 無視: %{public}@", id)
+    /// sessions から displayPhase を再計算し、変化があれば onPhaseChanged を発火する。
+    /// 同一 displayPriority のセッションが複数ある場合は startedAt が早い方を選択する（決定的）。
+    private func recalculateDisplayPhase() {
+        let primary = sessions.values.min { a, b in
+            if a.phase.displayPriority != b.phase.displayPriority {
+                return a.phase.displayPriority < b.phase.displayPriority
             }
-        case .toolStart(let id, _):
-            os_log(.debug, "foreign tool_start 無視: %{public}@", id)
-        case .toolEnd(let id, _, _, _, _):
-            os_log(.debug, "foreign tool_end 無視: %{public}@", id)
-        case .unknown:
-            break
+            return a.startedAt < b.startedAt
         }
+        updateDisplayPhase(to: primary?.phase ?? .idle)
     }
 
-    // MARK: - Phase 遷移
+    /// displayPhase を直接更新する。sleep タイマー管理 + コールバック発火。
+    private func updateDisplayPhase(to newPhase: MascotPhase) {
+        guard displayPhase != newPhase else { return }
+        displayPhase = newPhase
 
-    private func transition(to phase: MascotPhase) {
-        guard displayPhase != phase else { return }
-        displayPhase = phase
-
-        if case .idle = phase {
+        if case .idle = newPhase, sessions.isEmpty {
             startSleepTimerIfNeeded()
         }
 
-        onPhaseChanged?(phase)
-    }
-
-    // MARK: - Auto-transition（遅延遷移）
-
-    private func scheduleAutoTransition(
-        to phase: MascotPhase,
-        after delay: TimeInterval,
-        expectedSessionID: String?
-    ) {
-        let epoch = transitionEpoch
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            guard self.transitionEpoch == epoch else { return }
-            guard expectedSessionID == nil
-               || self.session?.sessionID == expectedSessionID
-            else { return }
-            self.transition(to: phase)
-        }
-        pendingTransition = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        onPhaseChanged?(newPhase)
     }
 
     // MARK: - Sleep タイマー
 
     private func startSleepTimerIfNeeded() {
-        guard session == nil else { return }
+        guard sessions.isEmpty else { return }
         guard case .idle = displayPhase else { return }
         sleepTimer?.invalidate()
         sleepTimer = Timer.scheduledTimer(
             withTimeInterval: sleepThreshold, repeats: false
         ) { [weak self] _ in
             guard let self else { return }
-            guard self.session == nil else { return }
-            self.transition(to: .sleeping)
+            guard self.sessions.isEmpty else { return }
+            self.updateDisplayPhase(to: .sleeping)
         }
     }
 
     private func cancelSleepTimer() {
         sleepTimer?.invalidate()
         sleepTimer = nil
+    }
+}
+
+// MARK: - MascotPhase ヘルパー
+
+extension MascotPhase {
+    /// .done かどうかを判定する。
+    var isDone: Bool {
+        if case .done = self { return true }
+        return false
     }
 }
