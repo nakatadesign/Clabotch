@@ -103,12 +103,12 @@ final class CoordinatorBinder {
 
     static func gazeOverride(for phase: MascotPhase) -> GazeOverride {
         switch phase {
-        case .idle:     return .fixed(frame: .f02_rightDown, reason: .mascotStateOverride)
+        case .idle:     return .fixed(frame: .f02_rightDown, reason: .mascotStateOverride, allowsAttentionOverride: true)
         case .thinking: return .none
         case .working:  return .none
-        case .done:     return .fixed(frame: .f02_rightDown, reason: .mascotStateOverride)
-        case .error:    return .fixed(frame: .f01_center, reason: .mascotStateOverride)
-        case .sleeping: return .fixed(frame: .f01_center, reason: .mascotStateOverride)
+        case .done:     return .fixed(frame: .f02_rightDown, reason: .mascotStateOverride, allowsAttentionOverride: true)
+        case .error:    return .fixed(frame: .f01_center, reason: .mascotStateOverride, allowsAttentionOverride: false)
+        case .sleeping: return .fixed(frame: .f01_center, reason: .mascotStateOverride, allowsAttentionOverride: false)
         }
     }
 

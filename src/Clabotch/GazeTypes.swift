@@ -36,9 +36,12 @@ enum GazeMode: Equatable {
 
 /// StateMachine → GazeController 間のフェーズ連携型。
 /// Coordinator（AppDelegate）が onPhaseChanged を受けて setOverride() に渡す。
+///
+/// `allowsAttentionOverride`: true の場合、attention 中はこの override をバイパスして
+/// ターミナル追跡を許可する。idle/done で true、error/sleeping で false。
 enum GazeOverride: Equatable {
     case none
-    case fixed(frame: GazeFrame, reason: FixedGazeReason)
+    case fixed(frame: GazeFrame, reason: FixedGazeReason, allowsAttentionOverride: Bool = false)
 }
 
 /// グローバルイベントモニターの抽象化。テスト時にモック差し替え可能にする。

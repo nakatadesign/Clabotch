@@ -5,9 +5,10 @@ import os.log
 /// v11 §11.5 準拠。AX API / NSWorkspace は DI 注入でテスト可能。
 ///
 /// 視線はイベント駆動の「注意（attention）」モデルで制御する:
-/// - フェーズ変更やターミナルのフロント遷移で一時的に注視を開始
+/// - フェーズ変更やターミナルのフロント遷移・クリックで一時的に注視を開始
 /// - 注視期限が切れると neutral position (f01_center) に戻る
-/// - stateOverride（idle/done/error/sleeping）は最優先
+/// - error/sleeping の stateOverride は最優先（attention でもバイパスしない）
+/// - idle/done の stateOverride は attention 中にバイパスされる
 final class GazeController {
 
     // MARK: - 公開状態
@@ -90,7 +91,7 @@ final class GazeController {
     func setOverride(_ override: GazeOverride) {
         dispatchPrecondition(condition: .onQueue(.main))
         stateOverride = override
-        if case .fixed(let frame, let reason) = override {
+        if case .fixed(let frame, let reason, _) = override {
             applyGaze(.fixed(frame, reason: reason), frame: frame)
         }
         // .none の場合は次の update() で再計算
@@ -164,15 +165,20 @@ final class GazeController {
         dispatchPrecondition(condition: .onQueue(.main))
         guard let bundle = workspaceProvider.frontmostBundleIdentifier(),
               supportedBundles.contains(bundle) else { return }
+        os_log(.debug, "クリック検出: %{public}@ → attention 開始", bundle)
         attentionExpiry = now().addingTimeInterval(attentionDuration)
         update()
     }
 
     private func update() {
         // v8: mascotStateOverride が最優先
-        if case .fixed(let frame, let reason) = stateOverride {
-            applyGaze(.fixed(frame, reason: reason), frame: frame)
-            return
+        // ただし allowsAttentionOverride=true（idle/done）は attention 中にスキップしてターミナル追跡を許可する
+        // allowsAttentionOverride=false（error/sleeping）は常に最優先で attention より優先する
+        if case .fixed(let frame, let reason, let allowsAttention) = stateOverride {
+            if !(isAttentionActive && allowsAttention) {
+                applyGaze(.fixed(frame, reason: reason), frame: frame)
+                return
+            }
         }
 
         checkPermission()

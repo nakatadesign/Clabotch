@@ -646,6 +646,72 @@ final class GazeControllerAttentionTests: XCTestCase {
         }
         wait(for: [exp2], timeout: 1.0)
     }
+
+    func testAttentionOverridesIdleOverride() {
+        // idle 状態の override (allowsAttentionOverride: true)
+        sut.setOverride(.fixed(frame: .f02_rightDown, reason: .mascotStateOverride, allowsAttentionOverride: true))
+        XCTAssertEqual(sut.gazeFrame, .f02_rightDown)
+
+        mockWorkspace.bundleIdentifier = "com.apple.Terminal"
+        mockWorkspace.pid = 1234
+        mockAX.terminalCenter = CGPoint(x: 500, y: 400)
+
+        // attention 開始 → idle override をスキップして tracking
+        sut.lookAtTerminal()
+        XCTAssertEqual(sut.mode, .tracking)
+    }
+
+    func testAttentionDoesNotOverrideErrorOverride() {
+        // error 状態の override (allowsAttentionOverride: false)
+        sut.setOverride(.fixed(frame: .f01_center, reason: .mascotStateOverride, allowsAttentionOverride: false))
+        XCTAssertEqual(sut.gazeFrame, .f01_center)
+
+        mockWorkspace.bundleIdentifier = "com.apple.Terminal"
+        mockWorkspace.pid = 1234
+        mockAX.terminalCenter = CGPoint(x: 500, y: 400)
+
+        // attention 開始しても error override が最優先
+        sut.lookAtTerminal()
+        XCTAssertEqual(sut.mode, .fixed(.f01_center, reason: .mascotStateOverride))
+    }
+
+    func testAttentionDoesNotOverrideSleepingOverride() {
+        // sleeping 状態の override (allowsAttentionOverride: false)
+        sut.setOverride(.fixed(frame: .f01_center, reason: .mascotStateOverride, allowsAttentionOverride: false))
+
+        mockWorkspace.bundleIdentifier = "com.apple.Terminal"
+        mockWorkspace.pid = 1234
+        mockAX.terminalCenter = CGPoint(x: 500, y: 400)
+
+        // attention 開始しても sleeping override が最優先
+        sut.lookAtTerminal()
+        XCTAssertEqual(sut.mode, .fixed(.f01_center, reason: .mascotStateOverride))
+    }
+
+    func testIdleOverrideResumesAfterAttentionExpires() {
+        // idle override 設定 (allowsAttentionOverride: true)
+        sut.setOverride(.fixed(frame: .f02_rightDown, reason: .mascotStateOverride, allowsAttentionOverride: true))
+
+        mockWorkspace.bundleIdentifier = "com.apple.Terminal"
+        mockWorkspace.pid = 1234
+        mockAX.terminalCenter = CGPoint(x: 500, y: 400)
+
+        // attention 中は tracking
+        sut.lookAtTerminal()
+        XCTAssertEqual(sut.mode, .tracking)
+
+        // attention 期限切れ → idle override に復帰
+        currentTime = currentTime.addingTimeInterval(0.5)
+        sut.startPolling()
+
+        let exp = expectation(description: "idle override resumes")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(self.sut.gazeFrame, .f02_rightDown)
+            XCTAssertEqual(self.sut.mode, .fixed(.f02_rightDown, reason: .mascotStateOverride))
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+    }
 }
 
 // MARK: - 6g. クリック検出テスト

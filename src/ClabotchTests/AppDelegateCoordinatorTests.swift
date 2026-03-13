@@ -26,7 +26,7 @@ final class AppDelegateCoordinatorTests: XCTestCase {
 
     func testGazeOverrideForIdleFixed() {
         let override = CoordinatorBinder.gazeOverride(for: .idle)
-        XCTAssertEqual(override, .fixed(frame: .f02_rightDown, reason: .mascotStateOverride))
+        XCTAssertEqual(override, .fixed(frame: .f02_rightDown, reason: .mascotStateOverride, allowsAttentionOverride: true))
     }
 
     func testGazeOverrideForThinkingNone() {
@@ -41,7 +41,7 @@ final class AppDelegateCoordinatorTests: XCTestCase {
 
     func testGazeOverrideForDoneFixed() {
         let override = CoordinatorBinder.gazeOverride(for: .done(elapsedMs: 1000))
-        XCTAssertEqual(override, .fixed(frame: .f02_rightDown, reason: .mascotStateOverride))
+        XCTAssertEqual(override, .fixed(frame: .f02_rightDown, reason: .mascotStateOverride, allowsAttentionOverride: true))
     }
 
     func testGazeOverrideForErrorFixed() {
