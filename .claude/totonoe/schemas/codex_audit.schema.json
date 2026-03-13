@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "agreement",
+    "grade_adjustment",
+    "missed_issues",
+    "spurious_issues",
+    "assessment"
+  ],
+  "properties": {
+    "agreement": {
+      "type": "string",
+      "enum": ["agree", "partial", "disagree"],
+      "description": "Gemini の判断への同意度"
+    },
+    "grade_adjustment": {
+      "type": "string",
+      "description": "提案するグレード/recommendation 調整。変更不要なら 'none'"
+    },
+    "missed_issues": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Gemini が見落とした問題"
+    },
+    "spurious_issues": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Gemini が過剰に指摘した問題"
+    },
+    "assessment": {
+      "type": "string",
+      "minLength": 1,
+      "description": "添削の総合評価"
+    }
+  }
+}

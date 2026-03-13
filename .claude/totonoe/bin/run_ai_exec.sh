@@ -524,6 +524,40 @@ main() {
     fi
   fi
 
+  # Phase 2.5: Gemini 生レスポンス＋実行メタデータを保存する（添削用）
+  local output_dir output_basename meta_path
+  output_dir="$(dirname -- "${output_path}")"
+  output_basename="$(basename -- "${output_path}" .json)"
+  meta_path="${output_dir}/${output_basename}.meta.json"
+
+  # Gemini 使用時は生レスポンスを保存（cleanup で消える前に）
+  if [ "${result_provider}" = "gemini" ] && [ -f "${gemini_response}" ]; then
+    local raw_path="${output_dir}/${output_basename}.gemini_raw.json"
+    safe_write "${raw_path}" < "${gemini_response}"
+  fi
+
+  # 実行メタデータを保存
+  jq -nc \
+    --arg ts "$(now_utc)" \
+    --arg provider "${result_provider}" \
+    --arg model "${result_model}" \
+    --arg provider_role "${provider_role_arg}" \
+    --arg provider_mode "${provider_mode}" \
+    --arg reason "${final_event_reason}" \
+    --arg role "${role}" \
+    --arg job "${job_name}" \
+    '{
+      executed_at: $ts,
+      provider: $provider,
+      model: (if $model == "" then null else $model end),
+      provider_role: $provider_role,
+      provider_mode: $provider_mode,
+      reason: $reason,
+      role: $role,
+      job: $job,
+      audited: false
+    }' | safe_write "${meta_path}"
+
   # Phase 3: persist output and provider state under a short lock.
   acquire_job_lock "${job_name}"
 
