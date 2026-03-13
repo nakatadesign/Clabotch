@@ -9,7 +9,7 @@
 - **active な計画**: なし
 - **CI**: green 確認済み（`8792c5b`）。PAT に actions:read 権限なし（API 確認不可、ブラウザで確認）
 - **branch protection**: N/A（private repo + GitHub Free では設定不可）
-- **総テスト**: 296 件（295 passed, 1 skipped）+ hook E2E 43 件
+- **総テスト**: 300 件（299 passed, 1 skipped）+ hook E2E 43 件
 - **totonoe upstream**: 全修正反映済み（`284af6b` + `da95d78`）
 - **Codex**: 使用上限到達（Mar 19 まで利用不可）。GEMINI_API_KEY 未設定のため Gemini フォールバックも不可
 
@@ -122,6 +122,7 @@ Reviewer Grade A、Manager done（force）。totonoe job: notarization-packaging
 
 - **注意（attention）ベース視線制御** (`a7b2af5`): 常時 AX 追尾をやめ、フェーズ変更/ターミナルフロント遷移時のみ 2秒間一時注視する方式に移行
 - **グローバルクリック検出** (`d46d011`): ターミナルウィンドウへのクリックで注視を再開。`GlobalEventMonitorProviding` DI + テスト 5 件。patch_013 追加
+- **attention vs override 優先順位修正** (`1f10164`): idle/done の stateOverride が attention を常にブロックしていた問題を修正。`allowsAttentionOverride` フラグで型安全に制御
 - **スリープ無効化バグ修正** (`e4e88b7`): 設定でスリープを無効にしても `.sleeping` から戻らなかった不具合を修正。`StateMachine.updateSleepThreshold()` で sleeping 中の閾値変更を考慮。
 
 | 優先度 | タスク | 種別 | 備考 |
