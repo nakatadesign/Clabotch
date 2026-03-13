@@ -18,6 +18,7 @@ done_guard_failure_reason() {
   local state_json="$1"
   local round_path="$2"
   local judge_file="$3"
+  local force_mode="${4:-0}"
   local failures=()
   local current_round critical_count analyze_status test_status recommendation spot_round
 
@@ -28,11 +29,16 @@ done_guard_failure_reason() {
   recommendation="$(safe_read "${judge_file}" | jq -r '.recommendation')"
   spot_round="$(printf '%s\n' "${state_json}" | jq -r '.manager_spot_check.round // -1')"
 
+  # 必須チェック: --force でもスキップしない
   [ "${critical_count}" -eq 0 ] || failures+=("critical_count must be 0")
   { [ "${analyze_status}" = "passed" ] || [ "${analyze_status}" = "skipped" ]; } || failures+=("quality_gate.analyze must be passed or skipped")
   { [ "${test_status}" = "passed" ] || [ "${test_status}" = "skipped" ]; } || failures+=("quality_gate.test must be passed or skipped")
-  [ "${recommendation}" = "done" ] || failures+=("judge recommendation must be done")
-  [ "${spot_round}" = "${current_round}" ] || failures+=("manager_spot_check must exist for current round")
+
+  # Manager override 可能チェック: --force で緩和される
+  if [ "${force_mode}" != "1" ]; then
+    [ "${recommendation}" = "done" ] || failures+=("judge recommendation must be done")
+    [ "${spot_round}" = "${current_round}" ] || failures+=("manager_spot_check must exist for current round")
+  fi
 
   if [ "${#failures[@]}" -eq 0 ]; then
     return 1
@@ -191,7 +197,7 @@ main() {
   fi
 
   if [ "${requested_decision}" = "done" ]; then
-    if guard_failure="$(done_guard_failure_reason "${state_json}" "${round_path}" "${judge_file}")"; then
+    if guard_failure="$(done_guard_failure_reason "${state_json}" "${round_path}" "${judge_file}" "${force}")"; then
       final_decision="human"
       final_reason="requested done but guard failed: ${guard_failure}"
     fi
