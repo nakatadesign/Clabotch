@@ -30,6 +30,7 @@ final class GazeController {
 
     private let axProvider: AXProvider
     private let workspaceProvider: WorkspaceProvider
+    private let eventMonitor: GlobalEventMonitorProviding
     private let pollInterval: TimeInterval
     private var pollTimer: Timer?
     private let now: () -> Date
@@ -69,12 +70,14 @@ final class GazeController {
     init(
         axProvider: AXProvider = RealAXProvider(),
         workspaceProvider: WorkspaceProvider = RealWorkspaceProvider(),
+        eventMonitor: GlobalEventMonitorProviding = RealGlobalEventMonitor(),
         pollInterval: TimeInterval = 0.5,
         attentionDuration: TimeInterval = 2.0,
         now: @escaping () -> Date = { Date() }
     ) {
         self.axProvider = axProvider
         self.workspaceProvider = workspaceProvider
+        self.eventMonitor = eventMonitor
         self.pollInterval = pollInterval
         self.attentionDuration = attentionDuration
         self.now = now
@@ -109,7 +112,7 @@ final class GazeController {
         return now() < expiry
     }
 
-    /// ポーリング開始（0.5秒間隔）。
+    /// ポーリング開始（0.5秒間隔）+ グローバルクリック監視開始。
     func startPolling() {
         dispatchPrecondition(condition: .onQueue(.main))
         guard pollTimer == nil else { return }
@@ -120,13 +123,20 @@ final class GazeController {
         }
         RunLoop.main.add(timer, forMode: .common)
         pollTimer = timer
+
+        // ターミナルウィンドウへのクリックで注意を再開する
+        // NSEvent.addGlobalMonitorForEvents のコールバックはメインスレッドで呼ばれる
+        eventMonitor.startMonitoring { [weak self] in
+            self?.handleGlobalClick()
+        }
     }
 
-    /// ポーリング停止。
+    /// ポーリング停止 + クリック監視停止。
     func stopPolling() {
         dispatchPrecondition(condition: .onQueue(.main))
         pollTimer?.invalidate()
         pollTimer = nil
+        eventMonitor.stopMonitoring()
     }
 
     /// AX 権限のリクエスト（初回起動時）。
@@ -148,6 +158,15 @@ final class GazeController {
     }
 
     // MARK: - Private
+
+    /// グローバルクリック検出時の処理。フロントアプリが対応ターミナルなら attention を開始する。
+    private func handleGlobalClick() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard let bundle = workspaceProvider.frontmostBundleIdentifier(),
+              supportedBundles.contains(bundle) else { return }
+        attentionExpiry = now().addingTimeInterval(attentionDuration)
+        update()
+    }
 
     private func update() {
         // v8: mascotStateOverride が最優先

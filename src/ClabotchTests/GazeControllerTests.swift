@@ -647,3 +647,134 @@ final class GazeControllerAttentionTests: XCTestCase {
         wait(for: [exp2], timeout: 1.0)
     }
 }
+
+// MARK: - 6g. クリック検出テスト
+
+final class GazeControllerClickTests: XCTestCase {
+    private var sut: GazeController!
+    private var mockAX: MockAXProvider!
+    private var mockWorkspace: MockWorkspaceProvider!
+    private var mockEventMonitor: MockGlobalEventMonitor!
+    private var currentTime: Date!
+
+    override func setUp() {
+        super.setUp()
+        mockAX = MockAXProvider()
+        mockAX.isTrusted = true
+        mockWorkspace = MockWorkspaceProvider()
+        mockEventMonitor = MockGlobalEventMonitor()
+        currentTime = Date()
+        sut = GazeController(
+            axProvider: mockAX,
+            workspaceProvider: mockWorkspace,
+            eventMonitor: mockEventMonitor,
+            pollInterval: 0.05,
+            attentionDuration: 0.3,
+            now: { [unowned self] in self.currentTime }
+        )
+        sut.statusItemCenterProvider = { CGPoint(x: 100, y: 10) }
+        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
+    }
+
+    override func tearDown() {
+        sut.stopPolling()
+        sut = nil
+        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
+        super.tearDown()
+    }
+
+    func testClickMonitorStartsWithPolling() {
+        XCTAssertFalse(mockEventMonitor.isMonitoring)
+
+        sut.startPolling()
+
+        XCTAssertTrue(mockEventMonitor.isMonitoring)
+    }
+
+    func testClickMonitorStopsWithPolling() {
+        sut.startPolling()
+        XCTAssertTrue(mockEventMonitor.isMonitoring)
+
+        sut.stopPolling()
+
+        XCTAssertFalse(mockEventMonitor.isMonitoring)
+    }
+
+    func testClickOnTerminalTriggersAttention() {
+        mockWorkspace.bundleIdentifier = "com.apple.Terminal"
+        mockWorkspace.pid = 1234
+        mockAX.terminalCenter = CGPoint(x: 500, y: 400)
+
+        sut.startPolling()
+
+        // 初回ポーリングで attention 発火 → tracking
+        let exp1 = expectation(description: "initial tracking")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(self.sut.mode, .tracking)
+            // 注意を期限切れにする
+            self.currentTime = self.currentTime.addingTimeInterval(0.5)
+            exp1.fulfill()
+        }
+        wait(for: [exp1], timeout: 1.0)
+
+        // 注意切れで neutral に遷移
+        let exp2 = expectation(description: "neutral after expiry")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(self.sut.mode, .fixed(.f01_center, reason: .attentionNeutral))
+
+            // ターミナルウィンドウをクリック → attention 再開
+            self.mockEventMonitor.simulateClick()
+            exp2.fulfill()
+        }
+        wait(for: [exp2], timeout: 1.0)
+
+        // クリックで attention が再開 → tracking
+        let exp3 = expectation(description: "tracking after click")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertTrue(self.sut.isAttentionActive)
+            XCTAssertEqual(self.sut.mode, .tracking)
+            exp3.fulfill()
+        }
+        wait(for: [exp3], timeout: 1.0)
+    }
+
+    func testClickOnNonTerminalDoesNotTriggerAttention() {
+        mockWorkspace.bundleIdentifier = "com.apple.Safari"
+        mockWorkspace.pid = 1234
+
+        sut.startPolling()
+
+        let exp = expectation(description: "no attention for non-terminal click")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertFalse(self.sut.isAttentionActive)
+
+            // Safari 上でクリック → attention は発火しない
+            self.mockEventMonitor.simulateClick()
+
+            XCTAssertFalse(self.sut.isAttentionActive)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+    }
+
+    func testClickRefreshesExistingAttention() {
+        mockWorkspace.bundleIdentifier = "com.apple.Terminal"
+        mockWorkspace.pid = 1234
+        mockAX.terminalCenter = CGPoint(x: 500, y: 400)
+
+        sut.startPolling()
+        sut.lookAtTerminal()
+        XCTAssertTrue(sut.isAttentionActive)
+
+        // 0.2秒経過（残り0.1秒）
+        currentTime = currentTime.addingTimeInterval(0.2)
+        XCTAssertTrue(sut.isAttentionActive)
+
+        // クリック → タイマーリフレッシュ
+        mockEventMonitor.simulateClick()
+
+        // さらに 0.2秒経過（元の注意なら期限切れだがリフレッシュ後なのでまだ有効）
+        currentTime = currentTime.addingTimeInterval(0.2)
+        XCTAssertTrue(sut.isAttentionActive)
+    }
+}

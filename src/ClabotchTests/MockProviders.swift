@@ -37,3 +37,26 @@ final class MockWorkspaceProvider: WorkspaceProvider {
         pid
     }
 }
+
+/// GlobalEventMonitorProviding のテスト用モック。
+/// `simulateClick()` で登録済み handler を手動発火できる。
+final class MockGlobalEventMonitor: GlobalEventMonitorProviding {
+    private(set) var isMonitoring = false
+    private var handler: (() -> Void)?
+
+    func startMonitoring(handler: @escaping () -> Void) {
+        guard !isMonitoring else { return }
+        isMonitoring = true
+        self.handler = handler
+    }
+
+    func stopMonitoring() {
+        isMonitoring = false
+        handler = nil
+    }
+
+    /// テスト用: クリックイベントをシミュレートする
+    func simulateClick() {
+        handler?()
+    }
+}

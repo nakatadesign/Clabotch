@@ -68,3 +68,26 @@ struct RealWorkspaceProvider: WorkspaceProvider {
         NSWorkspace.shared.frontmostApplication?.processIdentifier
     }
 }
+
+/// NSEvent.addGlobalMonitorForEvents を使った本番実装。
+final class RealGlobalEventMonitor: GlobalEventMonitorProviding {
+    private var monitor: Any?
+
+    func startMonitoring(handler: @escaping () -> Void) {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { _ in
+            handler()
+        }
+    }
+
+    func stopMonitoring() {
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        monitor = nil
+    }
+
+    deinit {
+        stopMonitoring()
+    }
+}

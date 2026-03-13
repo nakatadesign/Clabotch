@@ -40,3 +40,11 @@ enum GazeOverride: Equatable {
     case none
     case fixed(frame: GazeFrame, reason: FixedGazeReason)
 }
+
+/// グローバルイベントモニターの抽象化。テスト時にモック差し替え可能にする。
+protocol GlobalEventMonitorProviding: AnyObject {
+    /// グローバルマウスクリックを監視開始する。handler はクリック検出時に呼ばれる。
+    func startMonitoring(handler: @escaping () -> Void)
+    /// 監視を停止する。
+    func stopMonitoring()
+}
