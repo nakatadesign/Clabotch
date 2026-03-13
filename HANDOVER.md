@@ -9,7 +9,7 @@
 - **branch protection**: N/A（private repo + GitHub Free では設定不可）
 - **総テスト**: 232 件（231 passed, 1 skipped）+ hook E2E 43 件
 - **totonoe upstream**: 全修正反映済み（`284af6b` + `da95d78`）
-- **最新コミット**: `8792c5b`（push 済み、CI green）
+- **最新コミット**: `a94268b`（push 済み）
 
 ---
 
@@ -45,7 +45,7 @@ MVP コア機能は全て実装済み。以下は WORKFLOW.md の優先度ルー
 | 2 | hook E2E テスト [10] flaky 対策 | 回帰防止テスト | CI で再現した場合 |
 | 3 | BubbleWindow 実環境テスト | テスト容易化 | GUI 環境で手動確認 |
 | ~~4~~ | ~~CI green 確認~~ | ~~完了~~ | `8792c5b` green 確認済み |
-| 5 | apply_manager_decision.sh done バグ修正 | バグ修正 | totonoe upstream で対応 |
+| ~~5~~ | ~~apply_manager_decision.sh done バグ修正~~ | ~~完了~~ | `a94268b` --force でガード分離 |
 | 6 | PAT 権限追加 | 外部依存 | 人間の作業。任意 |
 
 ### post-MVP ロードマップ（参考: 設計書 §9）
