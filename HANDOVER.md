@@ -136,7 +136,7 @@ Reviewer Grade A、Manager done（force）。totonoe job: notarization-packaging
 - ~~設定画面（UI パネル）~~ → **土台完了**（SettingsStore + SettingsWindowController）
 - ~~LaunchAgent 登録（自動起動）~~ → **完了**（SMAppService + 設定画面チェックボックス）
 - ~~Apple Notarization + DMG パッケージング~~ → **基盤完了**（スクリプト + 手順整備済み、Developer 証明書待ち）
-- Warp 完全対応（AX 属性確認後に supportedBundles へ昇格）
+- ~~Warp 完全対応~~ → **完了**（計画 009 で AX 検証済み、`dev.warp.Warp-Stable` を supportedBundles に昇格済み）
 
 ---
 
