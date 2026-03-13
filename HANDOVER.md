@@ -118,6 +118,10 @@ Reviewer Grade A、Manager done（force）。totonoe job: notarization-packaging
 
 ## 3. 次の優先タスク
 
+### 直近の修正
+
+- **スリープ無効化バグ修正** (`e4e88b7`): 設定でスリープを無効にしても `.sleeping` から戻らなかった不具合を修正。`StateMachine.updateSleepThreshold()` で sleeping 中の閾値変更を考慮。
+
 | 優先度 | タスク | 種別 | 備考 |
 |--------|--------|------|------|
 | 1 | Stop hook error 調査 | バグ修正 | 再現したら着手 |
