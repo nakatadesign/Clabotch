@@ -8,7 +8,7 @@
 - **active な計画**: なし
 - **CI**: green 確認済み（`8792c5b`）。PAT に actions:read 権限なし（API 確認不可、ブラウザで確認）
 - **branch protection**: N/A（private repo + GitHub Free では設定不可）
-- **総テスト**: 252 件（251 passed, 1 skipped）+ hook E2E 43 件
+- **総テスト**: 257 件（256 passed, 1 skipped）+ hook E2E 43 件
 - **totonoe upstream**: 全修正反映済み（`284af6b` + `da95d78`）
 - **Codex**: 使用上限到達（Mar 19 まで利用不可）。GEMINI_API_KEY 未設定のため Gemini フォールバックも不可
 
@@ -50,6 +50,20 @@ Reviewer Grade A、Manager done。totonoe job: bubblewindow-multisession-visibil
 
 ---
 
+## 2c. 経過時間表示精度改善サマリー
+
+ツール未使用セッションの elapsed_ms=0 問題を2層で改善:
+
+| 変更 | 内容 |
+|------|------|
+| clabotch_stop.sh | SESSION_START_FILE 不在時に session_start + session_done を1接続送信 |
+| StateMachine.sessionDone | hookElapsedMs==0 + 追跡済み → startedAt フォールバック計算 |
+| テスト +5件 | EF-1〜EF-5: フォールバック計算・優先順位・ephemeral 通知検証 |
+
+Reviewer Grade A、Judge done、Manager done。totonoe job: elapsed-time-accuracy-improvement
+
+---
+
 ## 3. 次の優先タスク
 
 | 優先度 | タスク | 種別 | 備考 |
@@ -63,7 +77,7 @@ Reviewer Grade A、Manager done。totonoe job: bubblewindow-multisession-visibil
 ### v0.3 残タスク
 
 - ~~foreign session の本格的な状態可視化（BubbleWindow 改修）~~ → **完了**（`[+N]` サフィックス + `onSessionCountChanged`）
-- 作業時間表示の改善（ツール未使用セッションの経過時間精度）
+- ~~作業時間表示の改善（ツール未使用セッションの経過時間精度）~~ → **完了**（startedAt フォールバック + stop hook 改善）
 
 ### v1.0 スコープ（配布・設定画面）
 

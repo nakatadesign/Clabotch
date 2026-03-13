@@ -312,10 +312,12 @@ final class StateMachineSleepTests: XCTestCase {
 
     // 20. session 存在時は sleep タイマーが始動しない
     func testSleepingNotFiresWithActiveSession() {
-        let sm = StateMachine(sleepThreshold: 0.1, doneAutoTransitionDelay: 10)
+        // フォールバック計算で elapsedMs が一貫するよう固定時刻を使用
+        let fixedDate = Date(timeIntervalSince1970: 1000)
+        let sm = StateMachine(sleepThreshold: 0.1, doneAutoTransitionDelay: 10, now: { fixedDate })
         sm.handle(event: .sessionStart(sessionID: "s1"))
         sm.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 0))
-        // done に遷移（doneAutoTransitionDelay=10 なのでセッション残留）
+        // startedAt == currentDate（同一固定時刻）→ フォールバック計算 = 0ms
         XCTAssertEqual(sm.displayPhase, .done(elapsedMs: 0))
 
         let exp = expectation(description: "not sleeping")
@@ -658,5 +660,85 @@ final class StateMachineMultiSessionTests: XCTestCase {
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1)
+    }
+}
+
+// MARK: - StateMachineElapsedFallbackTests（経過時間フォールバック計算）
+
+@MainActor
+final class StateMachineElapsedFallbackTests: XCTestCase {
+
+    // EF-1. Hook が elapsed_ms > 0 を提供 → そのまま使用
+    func testHookElapsedMsUsedWhenPositive() {
+        let sm = StateMachine(doneAutoTransitionDelay: 10)
+        sm.handle(event: .sessionStart(sessionID: "s1"))
+        sm.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 5000))
+        XCTAssertEqual(sm.displayPhase, .done(elapsedMs: 5000))
+    }
+
+    // EF-2. Hook が elapsed_ms == 0、追跡済みセッション → startedAt からフォールバック計算
+    func testFallbackElapsedFromStartedAt() {
+        let fixedDate = Date(timeIntervalSince1970: 1000)
+        var tick = 0
+        let sm = StateMachine(doneAutoTransitionDelay: 10, now: {
+            defer { tick += 1 }
+            // tick 0: session_start → startedAt = 1000
+            // tick 1: sessionDone  → currentDate = 1060（60秒後）
+            return fixedDate.addingTimeInterval(Double(tick) * 60)
+        })
+        sm.handle(event: .sessionStart(sessionID: "s1"))
+        sm.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 0))
+
+        // startedAt=1000, currentDate=1060 → 60秒 = 60000ms
+        XCTAssertEqual(sm.displayPhase, .done(elapsedMs: 60000))
+    }
+
+    // EF-3. フォールバック計算が ephemeral 通知にも反映される
+    func testFallbackElapsedFiresEphemeral() {
+        let fixedDate = Date(timeIntervalSince1970: 1000)
+        var tick = 0
+        let sm = StateMachine(doneAutoTransitionDelay: 10, now: {
+            defer { tick += 1 }
+            return fixedDate.addingTimeInterval(Double(tick) * 30)
+        })
+        var receivedMs: Int?
+        sm.onEphemeralDone = { ms in receivedMs = ms }
+
+        sm.handle(event: .sessionStart(sessionID: "a"))  // tick 0: t=1000
+        sm.handle(event: .sessionStart(sessionID: "b"))  // tick 1: t=1030
+        sm.handle(event: .toolStart(sessionID: "a", toolName: "Bash"))  // tick 2: t=1060
+
+        // b は thinking(2), a は working(1) → displayPhase = .working
+        // b を done(0) → 非プライマリ + フォールバック計算
+        sm.handle(event: .sessionDone(sessionID: "b", elapsedMs: 0))  // tick 3: t=1090
+
+        // b.startedAt = 1030, currentDate = 1090 → 60秒 = 60000ms
+        XCTAssertEqual(receivedMs, 60000)
+    }
+
+    // EF-4. 未追跡セッションの elapsedMs==0 → フォールバックなし（silent drop）
+    func testUntrackedSessionZeroMsNoFallback() {
+        let sm = StateMachine()
+        var ephemeralCount = 0
+        sm.onEphemeralDone = { _ in ephemeralCount += 1 }
+
+        sm.handle(event: .sessionStart(sessionID: "s1"))
+        sm.handle(event: .sessionDone(sessionID: "unknown", elapsedMs: 0))
+
+        XCTAssertEqual(ephemeralCount, 0)
+    }
+
+    // EF-5. Hook 値が優先される（Hook > 0 かつ startedAt からの計算値と異なる場合）
+    func testHookValueTakesPrecedenceOverFallback() {
+        let fixedDate = Date(timeIntervalSince1970: 1000)
+        var tick = 0
+        let sm = StateMachine(doneAutoTransitionDelay: 10, now: {
+            defer { tick += 1 }
+            return fixedDate.addingTimeInterval(Double(tick) * 120)
+        })
+        sm.handle(event: .sessionStart(sessionID: "s1"))
+        // Hook が 5000ms（5秒）を報告。startedAt からは 120秒。Hook 値を優先。
+        sm.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 5000))
+        XCTAssertEqual(sm.displayPhase, .done(elapsedMs: 5000))
     }
 }

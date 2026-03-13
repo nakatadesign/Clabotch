@@ -122,14 +122,25 @@ final class StateMachine {
                 recalculateDisplayPhase()
             }
 
-        case .sessionDone(let sessionID, let elapsedMs):
+        case .sessionDone(let sessionID, let hookElapsedMs):
             // 未追跡セッション: ephemeral 通知のみ
-            guard sessions[sessionID] != nil else {
-                if elapsedMs > 0 {
-                    onEphemeralDone?(elapsedMs)
+            guard let session = sessions[sessionID] else {
+                if hookElapsedMs > 0 {
+                    onEphemeralDone?(hookElapsedMs)
                 }
                 return
             }
+
+            // Hook が elapsed_ms を提供しなかった場合（ツール未使用セッション等）、
+            // app が記録した startedAt からフォールバック計算する。
+            let elapsedMs: Int
+            if hookElapsedMs > 0 {
+                elapsedMs = hookElapsedMs
+            } else {
+                let computedMs = Int(currentDate.timeIntervalSince(session.startedAt) * 1000)
+                elapsedMs = max(0, computedMs)
+            }
+
             bumpEpoch(for: sessionID)
             sessions[sessionID]?.lastEventAt = currentDate
             sessions[sessionID]?.phase = .done(elapsedMs: elapsedMs)
