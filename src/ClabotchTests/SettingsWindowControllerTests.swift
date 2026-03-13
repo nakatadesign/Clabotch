@@ -97,4 +97,55 @@ final class StateMachineUpdateSleepThresholdTests: XCTestCase {
         }
         waitForExpectations(timeout: 1) { _ in timer.invalidate() }
     }
+
+    /// スリープ中に閾値を変更すると idle に戻る
+    func testUpdateSleepThresholdWhileSleepingWakesUp() {
+        let sm = StateMachine(sleepThreshold: 0.05)
+        sm.start()
+
+        // スリープに入るのを待つ
+        let sleepExp = expectation(description: "enter sleep")
+        let pollTimer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { timer in
+            if sm.displayPhase == .sleeping {
+                timer.invalidate()
+                sleepExp.fulfill()
+            }
+        }
+        waitForExpectations(timeout: 1) { _ in pollTimer.invalidate() }
+        XCTAssertEqual(sm.displayPhase, .sleeping)
+
+        // スリープ無効に変更 → idle に戻る
+        sm.updateSleepThreshold(.infinity)
+        XCTAssertEqual(sm.displayPhase, .idle)
+    }
+
+    /// スリープ中に有限の閾値に変更すると idle に戻り、新タイマーが始動する
+    func testUpdateSleepThresholdWhileSleepingRestartsWithNewThreshold() {
+        let sm = StateMachine(sleepThreshold: 0.05)
+        sm.start()
+
+        // スリープに入るのを待つ
+        let sleepExp = expectation(description: "enter sleep")
+        let pollTimer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { timer in
+            if sm.displayPhase == .sleeping {
+                timer.invalidate()
+                sleepExp.fulfill()
+            }
+        }
+        waitForExpectations(timeout: 1) { _ in pollTimer.invalidate() }
+        XCTAssertEqual(sm.displayPhase, .sleeping)
+
+        // 新しい閾値に変更 → idle に戻り、再度スリープに入る
+        sm.updateSleepThreshold(0.05)
+        XCTAssertEqual(sm.displayPhase, .idle)
+
+        let reSleepExp = expectation(description: "re-enter sleep")
+        let reTimer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { timer in
+            if sm.displayPhase == .sleeping {
+                timer.invalidate()
+                reSleepExp.fulfill()
+            }
+        }
+        waitForExpectations(timeout: 1) { _ in reTimer.invalidate() }
+    }
 }

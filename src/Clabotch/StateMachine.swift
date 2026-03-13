@@ -270,6 +270,12 @@ final class StateMachine {
         dispatchPrecondition(condition: .onQueue(.main))
         sleepThreshold = newThreshold
         cancelSleepTimer()
+
+        // スリープ中に閾値が変更された場合、idle に戻してからタイマーを再スケジュール
+        if case .sleeping = displayPhase {
+            updateDisplayPhase(to: .idle)
+        }
+
         if newThreshold.isFinite {
             startSleepTimerIfNeeded()
         }
