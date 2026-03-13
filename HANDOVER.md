@@ -4,12 +4,12 @@
 
 - **MVP**: **完了**（v0.1 相当、設計書 §9 PoC + v0.1 + v0.2 スコープ全達成）
 - **v0.3**: **完了**（計画 014 + BubbleWindow 可視化 + 経過時間精度）
-- **v1.0**: **設定画面の土台 完了**
+- **v1.0**: **設定画面の土台 + LaunchAgent 登録 + Notarization/DMG 基盤 完了**
 - **全計画 002〜014**: 完了
 - **active な計画**: なし
 - **CI**: green 確認済み（`8792c5b`）。PAT に actions:read 権限なし（API 確認不可、ブラウザで確認）
 - **branch protection**: N/A（private repo + GitHub Free では設定不可）
-- **総テスト**: 271 件（270 passed, 1 skipped）+ hook E2E 43 件
+- **総テスト**: 280 件（279 passed, 1 skipped）+ hook E2E 43 件
 - **totonoe upstream**: 全修正反映済み（`284af6b` + `da95d78`）
 - **Codex**: 使用上限到達（Mar 19 まで利用不可）。GEMINI_API_KEY 未設定のため Gemini フォールバックも不可
 
@@ -81,6 +81,41 @@ Reviewer Grade A、Manager done（override）。totonoe job: settings-panel-foun
 
 ---
 
+## 2e. LaunchAgent 登録サマリー
+
+ログイン時自動起動を設定画面に追加。SMAppService (macOS 13+) ベース:
+
+| 変更 | 内容 |
+|------|------|
+| LaunchAtLoginManager | LaunchAtLoginProviding プロトコル + SMAppService ラッパー |
+| SettingsWindowController | NSObject 継承追加、チェックボックス UI、エラー時リバート |
+| AppDelegate | LaunchAtLoginManager インスタンス生成・注入 |
+| テスト +9件 | モック 5件 + 設定画面連携 4件 |
+
+NSObject 継承は `@objc` target-action のランタイム動作に必須。
+ヘッドレステスト: `perform(selector, with:)` で windowFactory=nil 環境でもアクション発火。
+
+Reviewer Grade A、Manager done。totonoe job: launchagent-registration
+
+---
+
+## 2f. Notarization / DMG パッケージング基盤サマリー
+
+v1.0 配布準備の土台。Notarization に必要な設定とビルドスクリプトを整備:
+
+| 変更 | 内容 |
+|------|------|
+| Clabotch.entitlements | Hardened Runtime 用 entitlements（Apple Events） |
+| project.yml | MARKETING_VERSION 1.0.0、ENABLE_HARDENED_RUNTIME、Debug/Release 署名分離 |
+| build_release.sh | Release ビルド + DMG + Notarization スクリプト（--unsigned / --notarize） |
+| DISTRIBUTION.md | 配布手順（人間の作業 / 自動化の分離を明記） |
+
+人間の残作業: Apple Developer Program 加入 → Developer ID 証明書 → DEVELOPMENT_TEAM 記入 → 署名付きビルド
+
+Reviewer Grade A、Manager done（force）。totonoe job: notarization-packaging-foundation
+
+---
+
 ## 3. 次の優先タスク
 
 | 優先度 | タスク | 種別 | 備考 |
@@ -99,8 +134,8 @@ Reviewer Grade A、Manager done（override）。totonoe job: settings-panel-foun
 ### v1.0 スコープ（配布・設定画面）
 
 - ~~設定画面（UI パネル）~~ → **土台完了**（SettingsStore + SettingsWindowController）
-- LaunchAgent 登録（自動起動）— 設定画面に「ログイン時に起動」トグルを追加予定
-- Apple Notarization + DMG パッケージング（Developer 証明書が必要）
+- ~~LaunchAgent 登録（自動起動）~~ → **完了**（SMAppService + 設定画面チェックボックス）
+- ~~Apple Notarization + DMG パッケージング~~ → **基盤完了**（スクリプト + 手順整備済み、Developer 証明書待ち）
 - Warp 完全対応（AX 属性確認後に supportedBundles へ昇格）
 
 ---

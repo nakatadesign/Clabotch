@@ -26,6 +26,9 @@ Package.resolved
 # Artifacts (ローカル CI 検証の中間成果物)
 artifacts/
 
+# Release 配布物
+dist/
+
 # Claude Code local
 .claude/projects/
 .claude/*
