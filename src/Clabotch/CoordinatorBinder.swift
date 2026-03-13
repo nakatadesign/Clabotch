@@ -60,13 +60,25 @@ final class CoordinatorBinder {
                 self.eyeView?.performJump()
             }
 
-            if let text = Self.bubbleText(for: phase) {
+            if let text = self.bubbleText(for: phase) {
                 if let anchor = self.anchorProvider() {
                     self.activeBubble.show(text: text, anchor: anchor)
                 }
             } else {
                 self.activeBubble.dismiss()
             }
+        }
+
+        // セッション数変化時にバブルテキストを再評価（displayPhase 不変でも [+N] が変わる）
+        stateMachine.onSessionCountChanged = { [weak self] _ in
+            guard let self else { return }
+            let phase = self.stateMachine.displayPhase
+            if let text = self.bubbleText(for: phase) {
+                if let anchor = self.anchorProvider() {
+                    self.activeBubble.show(text: text, anchor: anchor)
+                }
+            }
+            // idle/sleeping → bubbleText==nil → 既に dismiss 済みなので何もしない
         }
 
         stateMachine.onEphemeralDone = { [weak self] elapsedMs in
@@ -107,23 +119,33 @@ final class CoordinatorBinder {
 
     // MARK: - Phase → 吹き出し文言（v11 §6 準拠）
 
-    static func bubbleText(for phase: MascotPhase) -> String? {
+    /// 現在の displayPhase に対応する吹き出し文言を返す。
+    /// 複数セッションがアクティブな場合、`[+N]` サフィックスで他セッション数を表示する。
+    func bubbleText(for phase: MascotPhase) -> String? {
+        let base: String?
         switch phase {
         case .thinking:
-            return "考えてます..."
+            base = "考えてます..."
         case .working(let toolName):
-            return "\(toolName) 実行中..."
+            base = "\(toolName) 実行中..."
         case .done(let elapsedMs):
             if elapsedMs > 0 {
-                return "完了！(\(formatElapsedTime(elapsedMs)))"
+                base = "完了！(\(Self.formatElapsedTime(elapsedMs)))"
             } else {
-                return "完了！"
+                base = "完了！"
             }
         case .error:
-            return "エラーが出ました…"  // v11 §6 固定文言。詳細 error_message は v1.0+ (§13.6)
+            base = "エラーが出ました…"  // v11 §6 固定文言。詳細 error_message は v1.0+ (§13.6)
         case .idle, .sleeping:
             return nil
         }
+
+        guard let text = base else { return nil }
+        let otherCount = stateMachine.sessions.count - 1
+        if otherCount > 0 {
+            return "\(text) [+\(otherCount)]"
+        }
+        return text
     }
 
     // MARK: - 定数

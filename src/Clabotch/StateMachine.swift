@@ -28,6 +28,12 @@ final class StateMachine {
 
     var onPhaseChanged: ((MascotPhase) -> Void)?
     var onEphemeralDone: ((Int) -> Void)?
+    /// セッション数が変化したときに発火する。バブルテキストの [+N] サフィックス更新に使用。
+    var onSessionCountChanged: ((Int) -> Void)?
+
+    // MARK: - セッション数追跡
+
+    private var lastNotifiedSessionCount: Int = 0
 
     // MARK: - レース対策（セッション単位）
 
@@ -179,6 +185,7 @@ final class StateMachine {
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             guard self.sessionEpochs[sessionID] == epoch else { return }
+            guard self.sessions[sessionID] != nil else { return }
             self.sessions.removeValue(forKey: sessionID)
             self.sessionEpochs.removeValue(forKey: sessionID)
             self.pendingTransitions.removeValue(forKey: sessionID)
@@ -192,6 +199,7 @@ final class StateMachine {
 
     /// sessions から displayPhase を再計算し、変化があれば onPhaseChanged を発火する。
     /// 同一 displayPriority のセッションが複数ある場合は startedAt が早い方を選択する（決定的）。
+    /// セッション数が変化した場合は onSessionCountChanged を発火する。
     private func recalculateDisplayPhase() {
         let primary = sessions.values.min { a, b in
             if a.phase.displayPriority != b.phase.displayPriority {
@@ -200,6 +208,15 @@ final class StateMachine {
             return a.startedAt < b.startedAt
         }
         updateDisplayPhase(to: primary?.phase ?? .idle)
+        notifySessionCountIfNeeded()
+    }
+
+    /// セッション数が前回通知時と異なる場合に onSessionCountChanged を発火する。
+    private func notifySessionCountIfNeeded() {
+        let count = sessions.count
+        guard count != lastNotifiedSessionCount else { return }
+        lastNotifiedSessionCount = count
+        onSessionCountChanged?(count)
     }
 
     /// displayPhase を直接更新する。sleep タイマー管理 + コールバック発火。

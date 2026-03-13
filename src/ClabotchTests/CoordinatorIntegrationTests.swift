@@ -451,16 +451,15 @@ final class CoordinatorIntegrationTests: XCTestCase {
         XCTAssertFalse(blinkController.isBlinking)
     }
 
-    func testH2ForeignSessionStartNoFanOut() {
+    func testH2ForeignSessionStartUpdatesBubbleWithSuffix() {
         // active session を確立
         stateMachine.handle(event: .sessionStart(sessionID: "s1"))
-        let countBefore = activeBubbleSpy.showCalls.count
 
-        // foreign session_start
+        // foreign session_start → セッション数変化で [+1] サフィックスが付加される
         stateMachine.handle(event: .sessionStart(sessionID: "s-foreign"))
 
-        waitForNoChange(description: "no additional fan-out") {
-            self.activeBubbleSpy.showCalls.count > countBefore
+        waitForCondition(description: "bubble updated with [+1] suffix") {
+            self.activeBubbleSpy.lastText == "考えてます... [+1]"
         }
     }
 
@@ -473,6 +472,76 @@ final class CoordinatorIntegrationTests: XCTestCase {
 
         waitForNoChange(description: "no duplicate fan-out") {
             self.activeBubbleSpy.showCalls.count > countAfterFirst
+        }
+    }
+
+    // MARK: - I. マルチセッション吹き出し表示
+
+    func testI1SingleSessionBubbleTextHasNoSuffix() {
+        stateMachine.handle(event: .sessionStart(sessionID: "s1"))
+
+        waitForCondition(description: "bubble shows thinking text") {
+            self.activeBubbleSpy.lastText == "考えてます..."
+        }
+    }
+
+    func testI2TwoSessionsBubbleTextShowsPlusOne() {
+        stateMachine.handle(event: .sessionStart(sessionID: "s1"))
+        stateMachine.handle(event: .sessionStart(sessionID: "s2"))
+
+        // s2 は s1 と同じ thinking → displayPhase 変化なし
+        // s2 を working にして displayPhase を更新させる
+        stateMachine.handle(event: .toolStart(sessionID: "s2", toolName: "Bash"))
+
+        waitForCondition(description: "bubble shows [+1] suffix") {
+            self.activeBubbleSpy.lastText == "Bash 実行中... [+1]"
+        }
+    }
+
+    func testI3ThreeSessionsBubbleTextShowsPlusTwo() {
+        stateMachine.handle(event: .sessionStart(sessionID: "s1"))
+        stateMachine.handle(event: .sessionStart(sessionID: "s2"))
+        stateMachine.handle(event: .sessionStart(sessionID: "s3"))
+
+        // s3 を error にして displayPhase を error に変更
+        stateMachine.handle(event: .toolStart(sessionID: "s3", toolName: "Bash"))
+        stateMachine.handle(event: .toolEnd(sessionID: "s3", toolName: "Bash", durationMs: 0, isError: true, errorMessage: "fail"))
+
+        waitForCondition(description: "bubble shows [+2] suffix") {
+            self.activeBubbleSpy.lastText == "エラーが出ました… [+2]"
+        }
+    }
+
+    func testI4SessionDoneReducesSuffix() {
+        stateMachine.handle(event: .sessionStart(sessionID: "s1"))
+        stateMachine.handle(event: .sessionStart(sessionID: "s2"))
+
+        // s1 を working にして表示
+        stateMachine.handle(event: .toolStart(sessionID: "s1", toolName: "Read"))
+
+        waitForCondition(description: "bubble shows [+1]") {
+            self.activeBubbleSpy.lastText == "Read 実行中... [+1]"
+        }
+
+        // s2 が done → session cleanup 後にサフィックスが消える
+        stateMachine.handle(event: .sessionDone(sessionID: "s2", elapsedMs: 1000))
+
+        // done セッションの cleanup（doneAutoTransitionDelay=0.3s）を待つ
+        waitForCondition(description: "suffix disappears after session cleanup") {
+            self.activeBubbleSpy.lastText == "Read 実行中..."
+        }
+    }
+
+    func testI5DonePhaseWithMultiSessionsShowsSuffix() {
+        stateMachine.handle(event: .sessionStart(sessionID: "s1"))
+        stateMachine.handle(event: .sessionStart(sessionID: "s2"))
+
+        // s1 を done に → displayPhase は s2 の thinking（priority 2 < done 3）
+        stateMachine.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 5000))
+
+        // s2 は thinking, s1 は done（まだ cleanup 前）→ sessions.count=2
+        waitForCondition(description: "thinking with [+1] for done session") {
+            self.activeBubbleSpy.lastText == "考えてます... [+1]"
         }
     }
 }

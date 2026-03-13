@@ -1,9 +1,26 @@
 @testable import Clabotch
 import XCTest
 
-/// CoordinatorBinder の static 変換メソッドのテスト。
-/// Phase → GazeOverride / BlinkEnabled の対応表を検証する。
+/// CoordinatorBinder の変換メソッドのテスト。
+/// Phase → GazeOverride / BlinkEnabled / BubbleText の対応表を検証する。
+@MainActor
 final class AppDelegateCoordinatorTests: XCTestCase {
+
+    /// bubbleText テスト用: セッション 0 件の binder インスタンス
+    private func makeBinderWithNoSessions() -> CoordinatorBinder {
+        let sm = StateMachine()
+        let gc = GazeController(axProvider: MockAXProvider(), workspaceProvider: MockWorkspaceProvider(), pollInterval: 1)
+        let bc = BlinkController()
+        return CoordinatorBinder(
+            stateMachine: sm,
+            gazeController: gc,
+            blinkController: bc,
+            eyeView: nil,
+            activeBubble: BubbleSpy(),
+            ephemeralBubble: BubbleSpy(),
+            anchorProvider: { nil }
+        )
+    }
 
     // MARK: - gazeOverride(for:)
 
@@ -51,33 +68,39 @@ final class AppDelegateCoordinatorTests: XCTestCase {
         XCTAssertFalse(CoordinatorBinder.isBlinkEnabled(for: .sleeping))
     }
 
-    // MARK: - bubbleText(for:)
+    // MARK: - bubbleText(for:) — セッション 0 件（サフィックスなし）
 
     func testBubbleTextThinking() {
-        XCTAssertEqual(CoordinatorBinder.bubbleText(for: .thinking), "考えてます...")
+        let binder = makeBinderWithNoSessions()
+        XCTAssertEqual(binder.bubbleText(for: .thinking), "考えてます...")
     }
 
     func testBubbleTextDoneWithTime() {
-        XCTAssertEqual(CoordinatorBinder.bubbleText(for: .done(elapsedMs: 222000)), "完了！(3分42秒)")
+        let binder = makeBinderWithNoSessions()
+        XCTAssertEqual(binder.bubbleText(for: .done(elapsedMs: 222000)), "完了！(3分42秒)")
     }
 
     func testBubbleTextDoneNoTime() {
-        XCTAssertEqual(CoordinatorBinder.bubbleText(for: .done(elapsedMs: 0)), "完了！")
+        let binder = makeBinderWithNoSessions()
+        XCTAssertEqual(binder.bubbleText(for: .done(elapsedMs: 0)), "完了！")
     }
 
     func testBubbleTextErrorFixedMessage() {
+        let binder = makeBinderWithNoSessions()
         // v11 §6: error は固定文言。error_message は表示しない (§13.6)
-        XCTAssertEqual(CoordinatorBinder.bubbleText(for: .error(toolName: "Bash", message: "some detail")), "エラーが出ました…")
-        XCTAssertEqual(CoordinatorBinder.bubbleText(for: .error(toolName: "Bash", message: nil)), "エラーが出ました…")
+        XCTAssertEqual(binder.bubbleText(for: .error(toolName: "Bash", message: "some detail")), "エラーが出ました…")
+        XCTAssertEqual(binder.bubbleText(for: .error(toolName: "Bash", message: nil)), "エラーが出ました…")
     }
 
     func testBubbleTextWorking() {
-        XCTAssertEqual(CoordinatorBinder.bubbleText(for: .working(toolName: "Bash")), "Bash 実行中...")
+        let binder = makeBinderWithNoSessions()
+        XCTAssertEqual(binder.bubbleText(for: .working(toolName: "Bash")), "Bash 実行中...")
     }
 
     func testBubbleTextIdleNil() {
-        XCTAssertNil(CoordinatorBinder.bubbleText(for: .idle))
-        XCTAssertNil(CoordinatorBinder.bubbleText(for: .sleeping))
+        let binder = makeBinderWithNoSessions()
+        XCTAssertNil(binder.bubbleText(for: .idle))
+        XCTAssertNil(binder.bubbleText(for: .sleeping))
     }
 
     // MARK: - phaseName（回帰テスト: associated value がログに漏れないことを保証）
