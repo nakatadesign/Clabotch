@@ -162,11 +162,21 @@ final class ClabotchEyeView: NSView {
         stopAnimation()
 
         switch phase {
-        case .idle, .thinking, .working:
+        case .idle:
             faceColor = Palette.faceNormal
             showErrorX = false
             showSurprise = false
-            cancelBlink()  // sleeping からの復帰時にリセット
+            cancelBlink()
+        case .thinking:
+            faceColor = Palette.faceNormal
+            showErrorX = false
+            showSurprise = false
+            cancelBlink()
+        case .working:
+            faceColor = Palette.faceNormal
+            showErrorX = false
+            showSurprise = false
+            cancelBlink()
         case .done:
             faceColor = Palette.faceDone
             showErrorX = false
@@ -183,9 +193,9 @@ final class ClabotchEyeView: NSView {
             faceColor = Palette.faceSleep
             showErrorX = false
             showSurprise = false
-            blinkTimer?.invalidate()  // 進行中の blink シーケンスを無効化
+            blinkTimer?.invalidate()
             blinkTimer = nil
-            blinkStage = .closed  // v11 §6: sleeping は frame06（常時閉じ目）
+            blinkStage = .closed
         }
         needsDisplay = true
     }

@@ -85,6 +85,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             try hookServer?.start()
             os_log(.info, "HookServer started")
+
+            // HookServer 起動成功 = 新プロセス → SESSION_REGISTRY をクリア
+            // hooks 側が「session_start 送信済み」と誤認するのを防ぐ
+            let sessionRegistry = "/" + tmpDir + "/clabotch_sessions"
+            try? FileManager.default.removeItem(atPath: sessionRegistry)
         } catch let error as HookServerError where error == .alreadyRunning {
             os_log(.error, "既に別インスタンスが起動中")
             NSApplication.shared.terminate(nil)

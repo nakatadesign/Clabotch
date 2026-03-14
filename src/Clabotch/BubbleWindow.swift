@@ -31,6 +31,7 @@ final class BubbleWindow: BubblePresenting {
             defer: false
         )
         w.isOpaque = false
+        w.isReleasedWhenClosed = false  // ARC 環境では close() で自動解放させない
         w.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.95)
         w.level = .statusBar
         w.hasShadow = true

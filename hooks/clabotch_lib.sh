@@ -4,7 +4,7 @@
 
 # TMPDIR 末尾の / を正規化（macOS は通常 / 付きだが保証はない）
 _TMPDIR="${TMPDIR%/}"
-SOCK="${_TMPDIR}/clabotch.sock"
+SOCK="${_TMPDIR}/clabotch/hook.sock"
 SESSION_REGISTRY="${_TMPDIR}/clabotch_sessions"
 
 # ── jq 必須チェック ────────────────────────────────────────────────────────
