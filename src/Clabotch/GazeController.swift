@@ -176,25 +176,23 @@ final class GazeController {
 
     private func update() {
         // アプリ切替検出は常に実行（override/permission チェック前）
-        // idle 時の override で early return しても、ターミナルへの切替を検出できるようにする
         let currentBundle = workspaceProvider.frontmostBundleIdentifier()
         if currentBundle != lastFrontmostBundle {
             lastFrontmostBundle = currentBundle
             if let bundle = currentBundle, supportedBundles.contains(bundle) {
-                os_log(.info, "[Gaze] アプリ切替検出: %{public}@ → attention 開始", bundle)
+                os_log(.default, "👁 Gaze: アプリ切替検出: %{public}@ → attention 開始", bundle)
                 attentionExpiry = now().addingTimeInterval(attentionDuration)
             }
         }
 
         // stateOverride チェック
-        // allowsAttentionOverride=true（idle/done）は attention 中にバイパスしてターミナル追跡を許可
         // allowsAttentionOverride=false（error/sleeping）は常に最優先
         if case .fixed(let frame, let reason, let allowsAttention) = stateOverride {
-            if !(isAttentionActive && allowsAttention) {
+            if !allowsAttention {
                 applyGaze(.fixed(frame, reason: reason), frame: frame)
                 return
             }
-            os_log(.info, "[Gaze] attention が override をバイパス")
+            // allowsAttentionOverride=true の場合は常にバイパス（attention 不要）
         }
 
         checkPermission()
@@ -202,25 +200,12 @@ final class GazeController {
         guard permissionStatus == .granted else {
             let reason: FixedGazeReason = (permissionStatus == .notDetermined)
                 ? .permissionNotDetermined : .permissionDenied
-            os_log(.info, "[Gaze] 権限なし: %{public}@ → f02_rightDown", String(describing: permissionStatus))
+            os_log(.default, "👁 Gaze: 権限なし: %{public}@ → f02_rightDown", String(describing: permissionStatus))
             applyGaze(.fixed(.f02_rightDown, reason: reason), frame: .f02_rightDown)
             return
         }
 
-        // ① フロントアプリ分類
-        if let reason = classifyFrontmostTerminal(bundleID: currentBundle) {
-            let frame: GazeFrame = (reason == .unsupportedTerminal) ? .f02_rightDown : .f01_center
-            applyGaze(.fixed(frame, reason: reason), frame: frame)
-            return
-        }
-
-        // ② 注意が無効なら neutral position に戻る
-        guard isAttentionActive else {
-            applyGaze(.fixed(.f01_center, reason: .attentionNeutral), frame: .f01_center)
-            return
-        }
-
-        // ③ AX でウィンドウ位置取得（注意が有効な間のみ）
+        // ① AX でウィンドウ位置取得
         guard
             let pid = workspaceProvider.frontmostPID(),
             let origin = statusItemCenterProvider?()
@@ -232,20 +217,11 @@ final class GazeController {
             return
         }
 
-        // ④ 量子化
+        // ② 量子化
         if let target = center {
             let frame = quantize(from: origin, to: target)
             applyGaze(.tracking, frame: frame)
         }
-    }
-
-    private func classifyFrontmostTerminal(bundleID: String?) -> FixedGazeReason? {
-        guard let bundleID else {
-            return .terminalNotFound
-        }
-        if tentativeBundles.contains(bundleID) { return .unsupportedTerminal }
-        guard supportedBundles.contains(bundleID) else { return .terminalNotFound }
-        return nil
     }
 
     private func quantize(from origin: CGPoint, to target: CGPoint) -> GazeFrame {
