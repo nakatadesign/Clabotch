@@ -84,10 +84,16 @@ final class StateMachine {
 
         let currentDate = now()
 
+        os_log(.default, "🧠 StateMachine.handle: %{public}@ (sessions=%d, displayPhase=%{public}@)",
+               event.debugSummary, sessions.count, displayPhase.debugName)
+
         switch event {
         case .sessionStart(let sessionID):
             // 重複 session_start は no-op（§14.3 不変条件 4）
-            guard sessions[sessionID] == nil else { return }
+            guard sessions[sessionID] == nil else {
+                os_log(.debug, "🧠 StateMachine: session_start 重複 → no-op (sid=%{public}@)", String(sessionID.prefix(8)))
+                return
+            }
             cancelSleepTimer()
             sessions[sessionID] = SessionState(
                 sessionID: sessionID,
@@ -233,6 +239,8 @@ final class StateMachine {
     /// displayPhase を直接更新する。sleep タイマー管理 + コールバック発火。
     private func updateDisplayPhase(to newPhase: MascotPhase) {
         guard displayPhase != newPhase else { return }
+        os_log(.default, "🧠 StateMachine: フェーズ遷移 %{public}@ → %{public}@",
+               displayPhase.debugName, newPhase.debugName)
         displayPhase = newPhase
 
         if case .idle = newPhase, sessions.isEmpty {
@@ -280,6 +288,7 @@ final class StateMachine {
             startSleepTimerIfNeeded()
         }
     }
+
 }
 
 // MARK: - MascotPhase ヘルパー
@@ -289,5 +298,37 @@ extension MascotPhase {
     var isDone: Bool {
         if case .done = self { return true }
         return false
+    }
+
+    /// デバッグログ用の詳細フェーズ名（associated value 含む）
+    var debugName: String {
+        switch self {
+        case .idle:                return "idle"
+        case .thinking:            return "thinking"
+        case .working(let tool):   return "working(\(tool))"
+        case .done(let ms):        return "done(\(ms)ms)"
+        case .error(let tool, _):  return "error(\(tool))"
+        case .sleeping:            return "sleeping"
+        }
+    }
+}
+
+// MARK: - ClabotchEvent デバッグヘルパー
+
+extension ClabotchEvent {
+    /// デバッグログ用のイベント概要
+    var debugSummary: String {
+        switch self {
+        case .sessionStart(let sid):
+            return "session_start(sid=\(sid.prefix(8))…)"
+        case .toolStart(let sid, let tool):
+            return "tool_start(sid=\(sid.prefix(8))…, tool=\(tool))"
+        case .toolEnd(let sid, let tool, let ms, let isErr, _):
+            return "tool_end(sid=\(sid.prefix(8))…, tool=\(tool), \(ms)ms, err=\(isErr))"
+        case .sessionDone(let sid, let ms):
+            return "session_done(sid=\(sid.prefix(8))…, \(ms)ms)"
+        case .unknown:
+            return "unknown"
+        }
     }
 }

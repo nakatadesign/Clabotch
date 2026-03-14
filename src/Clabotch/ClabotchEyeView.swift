@@ -1,4 +1,5 @@
 import AppKit
+import os.log
 
 /// メニューバー上のマスコット描画ビュー。main thread 専用。
 /// PNG 素材ゼロ — 全フレームを Core Graphics で描画。
@@ -13,10 +14,10 @@ final class ClabotchEyeView: NSView {
 
     /// カラーパレット（v11 §3）
     enum Palette {
-        static let faceNormal  = NSColor(red: 0xB0/255.0, green: 0x78/255.0, blue: 0x78/255.0, alpha: 1)
-        static let faceDone    = NSColor(red: 0xC0/255.0, green: 0x88/255.0, blue: 0x88/255.0, alpha: 1)
-        static let faceError   = NSColor(red: 0xC0/255.0, green: 0x68/255.0, blue: 0x68/255.0, alpha: 1)
-        static let faceSleep   = NSColor(red: 0x90/255.0, green: 0x60/255.0, blue: 0x60/255.0, alpha: 1)
+        static let faceNormal  = NSColor(red: 0xB0/255.0, green: 0x78/255.0, blue: 0x78/255.0, alpha: 1) // #B07878 ピンクブラウン
+        static let faceDone    = NSColor(red: 0xD0/255.0, green: 0xA8/255.0, blue: 0x70/255.0, alpha: 1) // #D0A870 暖かいゴールド
+        static let faceError   = NSColor(red: 0xD0/255.0, green: 0x48/255.0, blue: 0x48/255.0, alpha: 1) // #D04848 明確な赤
+        static let faceSleep   = NSColor(red: 0x78/255.0, green: 0x68/255.0, blue: 0x88/255.0, alpha: 1) // #786888 青紫（眠い感）
         static let eyeWhite    = NSColor(red: 0xF0/255.0, green: 0xF0/255.0, blue: 0xF0/255.0, alpha: 1)
         static let pupil       = NSColor(red: 0x1A/255.0, green: 0x1A/255.0, blue: 0x1A/255.0, alpha: 1)
         static let errorX      = NSColor(red: 0xE9/255.0, green: 0x45/255.0, blue: 0x60/255.0, alpha: 1)
@@ -197,6 +198,9 @@ final class ClabotchEyeView: NSView {
             blinkTimer = nil
             blinkStage = .closed
         }
+        os_log(.default, "🎨 EyeView: phase=%{public}@ faceColor=%{public}@ errorX=%d surprise=%d blinkStage=%{public}@",
+               phase.debugName, Self.colorHex(faceColor),
+               showErrorX ? 1 : 0, showSurprise ? 1 : 0, String(describing: blinkStage))
         needsDisplay = true
     }
 
@@ -240,6 +244,8 @@ final class ClabotchEyeView: NSView {
 
     /// DONE アニメーションを開始する。
     private func startDoneAnimation() {
+        os_log(.default, "🎬 EyeView: DONE 瞳スピンアニメーション開始（%d ステップ, 間隔=%.0fms）",
+               Self.doneAnimSequence.count, Self.doneAnimInterval * 1000)
         animationStep = 0
         doneAnimPupilFrame = Self.doneAnimSequence[0]
 
@@ -262,6 +268,8 @@ final class ClabotchEyeView: NSView {
 
     /// ERROR シェイクアニメーションを開始する。
     private func startErrorShakeAnimation() {
+        os_log(.default, "🎬 EyeView: ERROR シェイクアニメーション開始（%d ステップ, 間隔=%.0fms）",
+               Self.errorShakeSequence.count, Self.errorShakeInterval * 1000)
         animationStep = 0
         shakeYOffset = Self.errorShakeSequence[0]
 
@@ -288,6 +296,8 @@ final class ClabotchEyeView: NSView {
     /// DONE 瞳スピンとは独立して動作する。CoordinatorBinder から呼ばれる。
     func performJump() {
         dispatchPrecondition(condition: .onQueue(.main))
+        os_log(.default, "🎬 EyeView: ジャンプアニメーション開始（%d ステップ, 間隔=%.0fms）",
+               Self.jumpSequence.count, Self.jumpInterval * 1000)
         stopJump()
         isJumping = true
         jumpStep = 0
@@ -468,6 +478,15 @@ final class ClabotchEyeView: NSView {
         px(ctx, 5, 7, 4, 1, dot, ox: ox, oy: oy, dy: dy)
         // 右目: 4×1 at (13, 7) — ソケットの中央付近
         px(ctx, 13, 7, 4, 1, dot, ox: ox, oy: oy, dy: dy)
+    }
+
+    /// NSColor を #RRGGBB 文字列に変換する（デバッグログ用）
+    static func colorHex(_ color: NSColor) -> String {
+        guard let rgb = color.usingColorSpace(.sRGB) else { return "?" }
+        let r = Int(rgb.redComponent * 255)
+        let g = Int(rgb.greenComponent * 255)
+        let b = Int(rgb.blueComponent * 255)
+        return String(format: "#%02X%02X%02X", r, g, b)
     }
 
     private func drawErrorX(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {

@@ -146,7 +146,9 @@ final class CoordinatorIntegrationTests: XCTestCase {
         }
 
         XCTAssertEqual(eyeView.showSurprise, true)
-        XCTAssertEqual(
+        // done でも視線追跡（override=none）
+        // GazeController は AX 権限なしだと permissionNotDetermined で fixed になるが、override 自体は none
+        XCTAssertNotEqual(
             gazeController.mode,
             .fixed(.f02_rightDown, reason: .mascotStateOverride)
         )
@@ -404,11 +406,12 @@ final class CoordinatorIntegrationTests: XCTestCase {
         // GazeController 初期値: .fixed(.f02_rightDown, reason: .terminalNotFound)
         XCTAssertEqual(gc.mode, .fixed(.f02_rightDown, reason: .terminalNotFound))
 
-        // start() → onPhaseChanged(.idle) → setOverride(.fixed(.f02_rightDown, .mascotStateOverride))
+        // start() → onPhaseChanged(.idle) → setOverride(.none) → 常にカーソル追跡
         sm.start()
 
-        // reason が .mascotStateOverride に変わったことで start() 経由の setOverride を証明
-        XCTAssertEqual(gc.mode, .fixed(.f02_rightDown, reason: .mascotStateOverride))
+        // idle でも override=none なので、GazeController は polling で決まる mode になる
+        // mascotStateOverride ではないことを検証
+        XCTAssertNotEqual(gc.mode, .fixed(.f02_rightDown, reason: .mascotStateOverride))
 
         // startPolling() はまだ呼ばれていない
         gc.startPolling()

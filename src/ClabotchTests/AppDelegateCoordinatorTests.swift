@@ -24,9 +24,9 @@ final class AppDelegateCoordinatorTests: XCTestCase {
 
     // MARK: - gazeOverride(for:)
 
-    func testGazeOverrideForIdleFixed() {
+    func testGazeOverrideForIdleNone() {
         let override = CoordinatorBinder.gazeOverride(for: .idle)
-        XCTAssertEqual(override, .fixed(frame: .f02_rightDown, reason: .mascotStateOverride, allowsAttentionOverride: true))
+        XCTAssertEqual(override, .none)
     }
 
     func testGazeOverrideForThinkingNone() {
@@ -39,9 +39,9 @@ final class AppDelegateCoordinatorTests: XCTestCase {
         XCTAssertEqual(override, .none)
     }
 
-    func testGazeOverrideForDoneFixed() {
+    func testGazeOverrideForDoneNone() {
         let override = CoordinatorBinder.gazeOverride(for: .done(elapsedMs: 1000))
-        XCTAssertEqual(override, .fixed(frame: .f02_rightDown, reason: .mascotStateOverride, allowsAttentionOverride: true))
+        XCTAssertEqual(override, .none)
     }
 
     func testGazeOverrideForErrorFixed() {
@@ -103,23 +103,23 @@ final class AppDelegateCoordinatorTests: XCTestCase {
         XCTAssertNil(binder.bubbleText(for: .sleeping))
     }
 
-    // MARK: - phaseName（回帰テスト: associated value がログに漏れないことを保証）
+    // MARK: - debugName（MascotPhase extension）
 
-    func testPhaseNameReturnsOnlyCaseName() {
-        XCTAssertEqual(CoordinatorBinder.phaseName(.idle), "idle")
-        XCTAssertEqual(CoordinatorBinder.phaseName(.thinking), "thinking")
-        XCTAssertEqual(CoordinatorBinder.phaseName(.working(toolName: "Bash")), "working")
-        XCTAssertEqual(CoordinatorBinder.phaseName(.done(elapsedMs: 99999)), "done")
-        XCTAssertEqual(CoordinatorBinder.phaseName(.error(toolName: "Read", message: "秘密の情報")), "error")
-        XCTAssertEqual(CoordinatorBinder.phaseName(.sleeping), "sleeping")
+    func testDebugNameIncludesAssociatedValues() {
+        XCTAssertEqual(MascotPhase.idle.debugName, "idle")
+        XCTAssertEqual(MascotPhase.thinking.debugName, "thinking")
+        XCTAssertEqual(MascotPhase.working(toolName: "Bash").debugName, "working(Bash)")
+        XCTAssertEqual(MascotPhase.done(elapsedMs: 99999).debugName, "done(99999ms)")
+        XCTAssertEqual(MascotPhase.error(toolName: "Read", message: "err").debugName, "error(Read)")
+        XCTAssertEqual(MascotPhase.sleeping.debugName, "sleeping")
     }
 
-    func testPhaseNameDoesNotLeakErrorMessage() {
-        let name = CoordinatorBinder.phaseName(.error(toolName: "Bash", message: "token=abc123"))
+    func testDebugNameDoesNotLeakErrorMessage() {
+        // error の debugName には toolName を含むが、error message は含まない
+        let name = MascotPhase.error(toolName: "Bash", message: "token=abc123").debugName
         XCTAssertFalse(name.contains("token"))
         XCTAssertFalse(name.contains("abc123"))
-        XCTAssertFalse(name.contains("Bash"))
-        XCTAssertEqual(name, "error")
+        XCTAssertEqual(name, "error(Bash)")
     }
 
     // MARK: - formatElapsedTime

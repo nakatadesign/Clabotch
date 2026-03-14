@@ -45,7 +45,7 @@ final class CoordinatorBinder {
         // StateMachine → Coordinator fan-out
         stateMachine.onPhaseChanged = { [weak self] phase in
             guard let self else { return }
-            os_log(.info, "フェーズ変更: %{public}@", Self.phaseName(phase))
+            os_log(.default, "👀 CoordinatorBinder: フェーズ変更 → %{public}@", phase.debugName)
 
             let override = Self.gazeOverride(for: phase)
             self.gazeController.setOverride(override)
@@ -103,10 +103,10 @@ final class CoordinatorBinder {
 
     static func gazeOverride(for phase: MascotPhase) -> GazeOverride {
         switch phase {
-        case .idle:     return .fixed(frame: .f02_rightDown, reason: .mascotStateOverride, allowsAttentionOverride: true)
+        case .idle:     return .none  // 常にカーソル追跡
         case .thinking: return .none
         case .working:  return .none
-        case .done:     return .fixed(frame: .f02_rightDown, reason: .mascotStateOverride, allowsAttentionOverride: true)
+        case .done:     return .none  // 常にカーソル追跡
         case .error:    return .fixed(frame: .f01_center, reason: .mascotStateOverride, allowsAttentionOverride: false)
         case .sleeping: return .fixed(frame: .f01_center, reason: .mascotStateOverride, allowsAttentionOverride: false)
         }
@@ -158,18 +158,6 @@ final class CoordinatorBinder {
     static let bubbleStackOffset: CGFloat = 30
 
     // MARK: - ヘルパー
-
-    /// ログ出力用の phase 名。associated value（error message 等）を含めない。
-    static func phaseName(_ phase: MascotPhase) -> String {
-        switch phase {
-        case .idle:     return "idle"
-        case .thinking: return "thinking"
-        case .working:  return "working"
-        case .done:     return "done"
-        case .error:    return "error"
-        case .sleeping: return "sleeping"
-        }
-    }
 
     static func formatElapsedTime(_ ms: Int) -> String {
         let totalSeconds = ms / 1000

@@ -465,7 +465,11 @@ final class HookServer {
                                 let generationOk = self.stateQueue.sync { self.generation == capturedGeneration }
                                 guard generationOk else { return }
                                 for envelope in envelopes {
-                                    guard self.deduplicator.shouldAccept(envelope.eventID) else { continue }
+                                    guard self.deduplicator.shouldAccept(envelope.eventID) else {
+                                        os_log(.debug, "🔌 HookServer: 重複イベント除外 id=%{public}@", envelope.eventID.uuidString)
+                                        continue
+                                    }
+                                    os_log(.default, "🔌 HookServer: イベント受理 → StateMachine へ転送: %{public}@", envelope.event.debugSummary)
                                     self.onEvent(envelope)
                                 }
                             }
