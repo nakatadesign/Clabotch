@@ -43,6 +43,15 @@ final class ClabotchEyeView: NSView {
     /// THINKING アニメーション各ステップの間隔
     static let thinkingAnimInterval: TimeInterval = 0.8
 
+    /// RESPONDING アニメーション: 中央⇔左下をゆっくり交互（「書いている」感）
+    static let respondingAnimSequence: [GazeFrame] = [
+        .f01_center,
+        .f03_leftDown,
+    ]
+
+    /// RESPONDING アニメーション各ステップの間隔（thinking より遅く、静かな印象）
+    static let respondingAnimInterval: TimeInterval = 2.0
+
     /// DONE アニメーション: 左下から時計回り2周 → 左下で停止
     static let doneAnimSequence: [GazeFrame] = [
         .f03_leftDown,  // 起点（左下）
@@ -135,6 +144,15 @@ final class ClabotchEyeView: NSView {
     /// THINKING アニメーション現在ステップ
     private var thinkingStep: Int = 0
 
+    /// RESPONDING アニメーション中の視線フレーム。nil = アニメなし。
+    private(set) var respondingAnimFrame: GazeFrame?
+
+    /// RESPONDING アニメーション駆動タイマー
+    private var respondingTimer: Timer?
+
+    /// RESPONDING アニメーション現在ステップ
+    private var respondingStep: Int = 0
+
     /// DONE 虹色グラデーションアニメーションタイマー
     private var rainbowTimer: Timer?
     /// 虹色グラデーションの基準色相（0.0〜1.0）
@@ -158,6 +176,7 @@ final class ClabotchEyeView: NSView {
         jumpTimer?.invalidate()
         rainbowTimer?.invalidate()
         thinkingTimer?.invalidate()
+        respondingTimer?.invalidate()
     }
 
     // MARK: - クリック透過（NSStatusBarButton にイベントを委譲）
@@ -227,8 +246,8 @@ final class ClabotchEyeView: NSView {
             showSurprise = false
             showSleepingEyes = false
             showHappyEyes = false
-            gazeFrame = .f01_center
             cancelBlink()
+            startRespondingAnimation()
         case .working:
             faceColor = Palette.faceDone  // 暖かいゴールド
             showErrorX = false
@@ -415,6 +434,7 @@ final class ClabotchEyeView: NSView {
         showHappyEyes = false
         shakeYOffset = 0
         stopThinkingAnimation()
+        stopRespondingAnimation()
         stopJump()
         stopRainbow()
     }
@@ -447,6 +467,32 @@ final class ClabotchEyeView: NSView {
         thinkingTimer = nil
         thinkingAnimFrame = nil
         thinkingStep = 0
+    }
+
+    // MARK: - RESPONDING アニメーション
+
+    /// RESPONDING アニメーションを開始する。中央⇔左下をゆっくり交互に動かす。
+    private func startRespondingAnimation() {
+        respondingStep = 0
+        respondingAnimFrame = Self.respondingAnimSequence[0]
+
+        respondingTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.respondingAnimInterval,
+            repeats: true
+        ) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
+            self.respondingStep = (self.respondingStep + 1) % Self.respondingAnimSequence.count
+            self.respondingAnimFrame = Self.respondingAnimSequence[self.respondingStep]
+            self.needsDisplay = true
+        }
+    }
+
+    /// RESPONDING アニメーションを停止する。
+    private func stopRespondingAnimation() {
+        respondingTimer?.invalidate()
+        respondingTimer = nil
+        respondingAnimFrame = nil
+        respondingStep = 0
     }
 
     // MARK: - 虹色アニメーション
@@ -542,8 +588,8 @@ final class ClabotchEyeView: NSView {
                 drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
                 drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy, frame: pupilFrame)
             } else {
-                // 通常: 目 + 瞳（thinking アニメーション中はそのフレームを優先）
-                let activeFrame = thinkingAnimFrame ?? gazeFrame
+                // 通常: 目 + 瞳（thinking/responding アニメーション中はそのフレームを優先）
+                let activeFrame = thinkingAnimFrame ?? respondingAnimFrame ?? gazeFrame
                 drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
                 drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy, frame: activeFrame)
             }

@@ -535,14 +535,65 @@ final class ClabotchEyeViewTests: XCTestCase {
         XCTAssertNil(sut.thinkingAnimFrame, "responding では thinking アニメーションが停止するべき")
     }
 
-    func testRespondingSetsGazeToCenterAndNormalFace() {
+    func testRespondingStartsRespondingAnimation() {
         sut.setPhaseAppearance(phase: .responding)
-        XCTAssertEqual(sut.gazeFrame, .f01_center)
+        XCTAssertNotNil(sut.respondingAnimFrame, "responding ではアニメーションが開始されるべき")
+        XCTAssertEqual(sut.respondingAnimFrame, .f01_center, "初期フレームは中央")
+    }
+
+    func testRespondingAnimationAlternatesGaze() {
+        sut.setPhaseAppearance(phase: .responding)
+        XCTAssertEqual(sut.respondingAnimFrame, .f01_center, "初期は中央")
+
+        let exp = expectation(description: "responding 視線が左下に遷移")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.1) {
+            XCTAssertEqual(self.sut.respondingAnimFrame, .f03_leftDown,
+                           "1ステップ後は左下であるべき")
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 3.0)
+    }
+
+    func testRespondingAnimationStopsOnPhaseChange() {
+        sut.setPhaseAppearance(phase: .responding)
+        XCTAssertNotNil(sut.respondingAnimFrame)
+
+        sut.setPhaseAppearance(phase: .idle)
+        XCTAssertNil(sut.respondingAnimFrame, "idle に遷移すると responding アニメーションが停止するべき")
+    }
+
+    func testRespondingSetsNormalFaceAndNoFlags() {
+        sut.setPhaseAppearance(phase: .responding)
         XCTAssertEqual(sut.faceColor, ClabotchEyeView.Palette.faceNormal)
         XCTAssertFalse(sut.showErrorX)
         XCTAssertFalse(sut.showSurprise)
         XCTAssertFalse(sut.showSleepingEyes)
         XCTAssertFalse(sut.showHappyEyes)
+    }
+
+    func testRespondingSequenceDefinition() {
+        let seq = ClabotchEyeView.respondingAnimSequence
+        XCTAssertEqual(seq.count, 2)
+        XCTAssertEqual(seq[0], .f01_center)
+        XCTAssertEqual(seq[1], .f03_leftDown)
+    }
+
+    func testRespondingIntervalIsSlowerThanThinking() {
+        XCTAssertGreaterThan(ClabotchEyeView.respondingAnimInterval,
+                             ClabotchEyeView.thinkingAnimInterval,
+                             "responding は thinking より遅いべき")
+    }
+
+    func testNonRespondingPhasesDoNotHaveRespondingAnim() {
+        let phases: [MascotPhase] = [
+            .idle, .thinking, .working(toolName: "Bash"),
+            .done(elapsedMs: 1000), .error(toolName: "Bash", message: nil), .sleeping
+        ]
+        for phase in phases {
+            sut.setPhaseAppearance(phase: phase)
+            XCTAssertNil(sut.respondingAnimFrame,
+                         "\(phase.debugName) では responding アニメーションが発動しないべき")
+        }
     }
 
     func testDrawDuringRespondingDoesNotCrash() {
