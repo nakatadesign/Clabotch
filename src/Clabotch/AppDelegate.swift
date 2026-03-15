@@ -112,7 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .allowClicked:
                     self.gazeController.requestPermission()
                 case .laterClicked:
-                    break  // notDetermined のまま続行（frame02 固定）
+                    break  // notGranted のまま続行（視線固定）
                 }
             }
         } else if !AXIsProcessTrusted() {
@@ -147,11 +147,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         alert.messageText = "アクセシビリティの許可が必要です"
         alert.informativeText = """
-            視線追跡にはアクセシビリティの許可が必要ですが、\
-            再起動やアップデートにより許可がリセットされたようです。
+            視線追跡にはアクセシビリティの許可が必要です。
 
-            「システム設定を開く」を押して、Clabotch のチェックを\
-            一度外してから再度チェックを入れてください。
+            「システム設定を開く」を押して、一覧に Clabotch を追加し\
+            チェックを入れてください。
+            既にチェックが入っている場合は、一度外してから\
+            再度入れ直すと改善する場合があります。
             """
         alert.alertStyle = .warning
         // LSUIElement アプリはアイコンが自動設定されないため明示指定
