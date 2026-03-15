@@ -21,7 +21,8 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine = StateMachine(
             sleepThreshold: 0.5,
             errorAutoTransitionDelay: 0.3,
-            doneAutoTransitionDelay: 0.3
+            doneAutoTransitionDelay: 0.3,
+            respondingTransitionDelay: 10  // テスト中に不意に発火しないよう長めに設定
         )
         mockAX = MockAXProvider()
         mockWorkspace = MockWorkspaceProvider()
