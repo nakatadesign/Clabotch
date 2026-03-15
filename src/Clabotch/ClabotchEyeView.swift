@@ -663,8 +663,8 @@ final class ClabotchEyeView: NSView {
             }
         }()
 
-        // 瞳: 3×8（左下/右下は row 7 で1px 欠けのカスタム形状）
-        if frame == .f03_leftDown {
+        // 瞳: 3×8（row 7 で右端1px 欠けのカスタム形状）
+        if frame == .f01_center || frame == .f03_leftDown {
             // 左下: 両目とも右端1px 欠け
             px(ctx, lx, ly,   3, 3, dot, ox: ox, oy: oy, dy: dy)   // rows 4-6
             px(ctx, lx, ly+3, 2, 1, dot, ox: ox, oy: oy, dy: dy)   // row 7（右端欠け）
