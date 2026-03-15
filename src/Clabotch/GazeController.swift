@@ -35,7 +35,9 @@ final class GazeController {
     private let axProvider: AXProvider
     private let workspaceProvider: WorkspaceProvider
     private let eventMonitor: GlobalEventMonitorProviding
-    private let pollInterval: TimeInterval
+    private let pollIntervalGranted: TimeInterval
+    private let pollIntervalNotGranted: TimeInterval
+    private var currentPollInterval: TimeInterval
     private var pollTimer: Timer?
     private let now: () -> Date
 
@@ -70,13 +72,16 @@ final class GazeController {
         workspaceProvider: WorkspaceProvider = RealWorkspaceProvider(),
         eventMonitor: GlobalEventMonitorProviding = RealGlobalEventMonitor(),
         pollInterval: TimeInterval = 0.5,
+        pollIntervalNotGranted: TimeInterval = 2.0,
         attentionDuration: TimeInterval = 2.0,
         now: @escaping () -> Date = { Date() }
     ) {
         self.axProvider = axProvider
         self.workspaceProvider = workspaceProvider
         self.eventMonitor = eventMonitor
-        self.pollInterval = pollInterval
+        self.pollIntervalGranted = pollInterval
+        self.pollIntervalNotGranted = pollIntervalNotGranted
+        self.currentPollInterval = pollInterval
         self.attentionDuration = attentionDuration
         self.now = now
     }
@@ -110,17 +115,12 @@ final class GazeController {
         return now() < expiry
     }
 
-    /// ポーリング開始（0.5秒間隔）+ グローバルクリック監視開始。
+    /// ポーリング開始 + グローバルクリック監視開始。
+    /// 権限状態に応じて間隔を切替（granted: 0.5s, notGranted: 2.0s）。
     func startPolling() {
         dispatchPrecondition(condition: .onQueue(.main))
         guard pollTimer == nil else { return }
-        let timer = Timer.scheduledTimer(
-            withTimeInterval: pollInterval, repeats: true
-        ) { [weak self] _ in
-            self?.update()
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        pollTimer = timer
+        recreateTimer()
 
         // ターミナルウィンドウへのクリックで注意を再開する
         // NSEvent.addGlobalMonitorForEvents のコールバックはメインスレッドで呼ばれる
@@ -135,6 +135,28 @@ final class GazeController {
         pollTimer?.invalidate()
         pollTimer = nil
         eventMonitor.stopMonitoring()
+    }
+
+    /// ポーリングタイマーを現在の間隔で再作成する。
+    private func recreateTimer() {
+        pollTimer?.invalidate()
+        let timer = Timer.scheduledTimer(
+            withTimeInterval: currentPollInterval, repeats: true
+        ) { [weak self] _ in
+            self?.update()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        pollTimer = timer
+    }
+
+    /// 権限状態に応じてポーリング間隔を調整する。
+    private func adjustPollInterval() {
+        let newInterval = (permissionStatus == .granted)
+            ? pollIntervalGranted : pollIntervalNotGranted
+        guard newInterval != currentPollInterval, pollTimer != nil else { return }
+        currentPollInterval = newInterval
+        recreateTimer()
+        os_log(.default, "👁 Gaze: ポーリング間隔変更 → %.1f秒", newInterval)
     }
 
     /// AX 権限のリクエスト。macOS のシステムダイアログを表示する。
@@ -230,6 +252,7 @@ final class GazeController {
         if permissionStatus != oldStatus {
             os_log(.default, "👁 Gaze: 権限変化: %{public}@ → %{public}@",
                    String(describing: oldStatus), String(describing: permissionStatus))
+            adjustPollInterval()
             onPermissionChanged?(permissionStatus)
         }
     }
