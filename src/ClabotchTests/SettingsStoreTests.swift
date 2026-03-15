@@ -82,4 +82,54 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(options.contains { $0.minutes == 5 })
         XCTAssertTrue(options.contains { $0.minutes == 0 }) // 無効
     }
+
+    // MARK: - animationSpeedPreset
+
+    func testDefaultAnimationSpeedIsNormal() {
+        XCTAssertEqual(store.animationSpeedPreset, 1)
+        XCTAssertEqual(store.animationSpeedMultiplier, 1.0)
+    }
+
+    func testSetAnimationSpeedPresetPersists() {
+        store.animationSpeedPreset = 0  // ゆっくり
+        let store2 = SettingsStore(defaults: testDefaults)
+        XCTAssertEqual(store2.animationSpeedPreset, 0)
+    }
+
+    func testAnimationSpeedMultiplierValues() {
+        store.animationSpeedPreset = 0  // ゆっくり
+        XCTAssertEqual(store.animationSpeedMultiplier, 1.5)
+
+        store.animationSpeedPreset = 1  // 標準
+        XCTAssertEqual(store.animationSpeedMultiplier, 1.0)
+
+        store.animationSpeedPreset = 2  // 速い
+        XCTAssertEqual(store.animationSpeedMultiplier, 0.6)
+    }
+
+    func testAnimationSpeedOutOfRangeFallsBackToDefault() {
+        testDefaults.set(99, forKey: "clabotch.animationSpeedPreset")
+        XCTAssertEqual(store.animationSpeedPreset, 1)
+        XCTAssertEqual(store.animationSpeedMultiplier, 1.0)
+    }
+
+    func testAnimationSpeedOnChangeFiresOnChange() {
+        var changeCount = 0
+        store.onChange = { changeCount += 1 }
+
+        store.animationSpeedPreset = 2
+        XCTAssertEqual(changeCount, 1)
+    }
+
+    func testAnimationSpeedOptionsContainDefault() {
+        let options = SettingsStore.animationSpeedOptions
+        XCTAssertEqual(options.count, 3)
+        XCTAssertTrue(options.contains { $0.label == "標準" && $0.multiplier == 1.0 })
+    }
+
+    func testResetClearsAnimationSpeed() {
+        store.animationSpeedPreset = 2
+        store.resetForTesting()
+        XCTAssertEqual(store.animationSpeedPreset, 1) // デフォルトに戻る
+    }
 }

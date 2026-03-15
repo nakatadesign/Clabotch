@@ -8,6 +8,7 @@ final class SettingsStore {
 
     private enum Keys {
         static let sleepTimeoutMinutes = "clabotch.sleepTimeoutMinutes"
+        static let animationSpeedPreset = "clabotch.animationSpeedPreset"
     }
 
     // MARK: - DI seam
@@ -63,11 +64,52 @@ final class SettingsStore {
         ("無効", 0),
     ]
 
+    // MARK: - アニメーション速度
+
+    /// アニメーション速度のプリセットインデックス。
+    /// 0=ゆっくり, 1=標準, 2=速い。デフォルト: 1（標準）。
+    var animationSpeedPreset: Int {
+        get {
+            if !defaults.hasValue(forKey: Keys.animationSpeedPreset) {
+                return Self.defaultAnimationSpeedPreset
+            }
+            let value = defaults.integer(forKey: Keys.animationSpeedPreset)
+            // 範囲外チェック
+            guard value >= 0, value < Self.animationSpeedOptions.count else {
+                return Self.defaultAnimationSpeedPreset
+            }
+            return value
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.animationSpeedPreset)
+            onChange?()
+        }
+    }
+
+    /// アニメーション間隔の倍率。1.0 が標準。大きいほどゆっくり。
+    var animationSpeedMultiplier: Double {
+        let options = Self.animationSpeedOptions
+        let index = animationSpeedPreset
+        guard index >= 0, index < options.count else { return 1.0 }
+        return options[index].multiplier
+    }
+
+    /// デフォルトのプリセットインデックス（標準）
+    static let defaultAnimationSpeedPreset = 1
+
+    /// アニメーション速度の選択肢
+    static let animationSpeedOptions: [(label: String, multiplier: Double)] = [
+        ("ゆっくり", 1.5),
+        ("標準", 1.0),
+        ("速い", 0.6),
+    ]
+
     // MARK: - テスト用
 
     /// 全設定をリセットする。
     func resetForTesting() {
         defaults.removeObject(forKey: Keys.sleepTimeoutMinutes)
+        defaults.removeObject(forKey: Keys.animationSpeedPreset)
     }
 }
 

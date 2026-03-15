@@ -61,15 +61,27 @@ final class SettingsWindowControllerTests: XCTestCase {
     func testAxSettingsButtonExistsAfterShow() {
         // windowFactory を実際のウィンドウを返すように設定
         let wc = SettingsWindowController(settingsStore: store)
-        var contentViewCaptured: NSView?
-        wc.windowFactory = { contentView in
-            contentViewCaptured = contentView
-            return nil  // ウィンドウは作らないが contentView は構築される
-        }
+        wc.windowFactory = { _ in nil }
         wc.showWindow()
         // axSettingsButton が構築されていること
         XCTAssertNotNil(wc.axSettingsButton)
         XCTAssertNotNil(wc.axStatusLabel)
+    }
+
+    func testAnimSpeedPopupExistsAfterShow() {
+        let wc = SettingsWindowController(settingsStore: store)
+        wc.windowFactory = { _ in nil }
+        wc.showWindow()
+        XCTAssertNotNil(wc.animSpeedPopup)
+        XCTAssertEqual(wc.animSpeedPopup?.numberOfItems, 3)
+    }
+
+    func testAnimSpeedPopupReflectsCurrentSetting() {
+        store.animationSpeedPreset = 2  // 速い
+        let wc = SettingsWindowController(settingsStore: store)
+        wc.windowFactory = { _ in nil }
+        wc.showWindow()
+        XCTAssertEqual(wc.animSpeedPopup?.selectedItem?.title, "速い")
     }
 }
 

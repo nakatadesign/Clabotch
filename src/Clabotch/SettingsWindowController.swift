@@ -10,7 +10,7 @@ final class SettingsWindowController: NSObject {
     /// ウィンドウ生成ファクトリ。テストでは nil を返してヘッドレス実行する。
     var windowFactory: (_ contentView: NSView) -> NSWindow? = { contentView in
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 260),
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 300),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -32,6 +32,8 @@ final class SettingsWindowController: NSObject {
     private(set) var sleepPopup: NSPopUpButton?
     /// チェックボックス（テスト検証用に公開）
     private(set) var launchAtLoginCheckbox: NSButton?
+    /// アニメーション速度ポップアップ（テスト検証用に公開）
+    private(set) var animSpeedPopup: NSPopUpButton?
     /// AX 権限ステータスラベル（テスト検証用に公開）
     private(set) var axStatusLabel: NSTextField?
     /// AX 権限ボタン（テスト検証用に公開）
@@ -75,7 +77,7 @@ final class SettingsWindowController: NSObject {
     // MARK: - UI 構築
 
     private func buildContentView() -> NSView {
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 260))
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 300))
 
         let stack = NSStackView()
         stack.orientation = .vertical
@@ -90,6 +92,10 @@ final class SettingsWindowController: NSObject {
         // スリープタイムアウト行
         let sleepRow = buildSleepTimeoutRow()
         stack.addArrangedSubview(sleepRow)
+
+        // アニメーション速度行
+        let animSpeedRow = buildAnimationSpeedRow()
+        stack.addArrangedSubview(animSpeedRow)
 
         // AX 権限セクション（区切り線 + ボタン + ステータス）
         let separator = NSBox()
@@ -143,6 +149,43 @@ final class SettingsWindowController: NSObject {
     @objc private func sleepTimeoutChanged(_ sender: NSPopUpButton) {
         guard let selectedItem = sender.selectedItem else { return }
         settingsStore.sleepTimeoutMinutes = selectedItem.tag
+    }
+
+    // MARK: - アニメーション速度
+
+    private func buildAnimationSpeedRow() -> NSView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.spacing = 8
+
+        let label = NSTextField(labelWithString: "アニメーション速度:")
+        label.font = .systemFont(ofSize: 13)
+
+        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+        popup.font = .systemFont(ofSize: 13)
+
+        let currentPreset = settingsStore.animationSpeedPreset
+        for (index, option) in SettingsStore.animationSpeedOptions.enumerated() {
+            popup.addItem(withTitle: option.label)
+            popup.lastItem?.tag = index
+            if index == currentPreset {
+                popup.selectItem(withTitle: option.label)
+            }
+        }
+
+        popup.target = self
+        popup.action = #selector(animationSpeedChanged(_:))
+
+        row.addArrangedSubview(label)
+        row.addArrangedSubview(popup)
+
+        animSpeedPopup = popup
+        return row
+    }
+
+    @objc private func animationSpeedChanged(_ sender: NSPopUpButton) {
+        guard let selectedItem = sender.selectedItem else { return }
+        settingsStore.animationSpeedPreset = selectedItem.tag
     }
 
     // MARK: - ログイン時自動起動

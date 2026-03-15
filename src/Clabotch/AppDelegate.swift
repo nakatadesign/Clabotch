@@ -66,10 +66,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.settingsWindowController?.refreshAccessibilityStatus()
         }
 
-        // 設定変更 → StateMachine へ伝播
+        // 設定変更 → StateMachine / EyeView へ伝播
         settingsStore.onChange = { [weak self] in
             guard let self else { return }
             self.stateMachine.updateSleepThreshold(self.settingsStore.sleepTimeoutSeconds)
+            self.applyAnimationSpeed()
         }
 
         // HookServer 初期化・起動
@@ -107,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // UI 初期化（HookServer の成否に依存しない）
         stateMachine.updateSleepThreshold(settingsStore.sleepTimeoutSeconds) // 保存済み設定を反映
+        applyAnimationSpeed() // 保存済みアニメーション速度を反映
         stateMachine.start()          // ① 初期フェーズ emit → setOverride / setBlinking
         gazeController.startPolling() // ② polling 開始
 
@@ -193,5 +195,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let frameInWindow = button.convert(button.bounds, to: nil)
         let frameOnScreen = window.convertToScreen(frameInWindow)
         return CGPoint(x: frameOnScreen.midX, y: frameOnScreen.minY)
+    }
+
+    // MARK: - アニメーション速度
+
+    /// 保存済みのアニメーション速度倍率を EyeView に反映する。
+    private func applyAnimationSpeed() {
+        guard let eyeView else { return }
+        let m = settingsStore.animationSpeedMultiplier
+        eyeView.thinkingAnimInterval = 0.8 * m
+        eyeView.respondingAnimInterval = 2.0 * m
     }
 }
