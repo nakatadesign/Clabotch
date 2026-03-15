@@ -607,6 +607,58 @@ final class ClabotchEyeViewTests: XCTestCase {
         sut.display()
     }
 
+    // MARK: - アニメーション速度変更即時反映
+
+    func testThinkingReapplyUsesNewInterval() {
+        // thinking を開始（デフォルト 0.8秒）
+        sut.setPhaseAppearance(phase: .thinking)
+        XCTAssertNotNil(sut.thinkingAnimFrame)
+
+        // interval を変更して再適用
+        sut.thinkingAnimInterval = 0.1
+        sut.setPhaseAppearance(phase: .thinking)
+
+        // 新 interval でアニメーション再起動 → 短い待機で遷移確認
+        let exp = expectation(description: "thinking re-applied with new interval")
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
+            if self.sut.thinkingAnimFrame == .f04_leftUp {
+                timer.invalidate()
+                exp.fulfill()
+            }
+        }
+        wait(for: [exp], timeout: 1.0)
+        timer.invalidate()
+    }
+
+    func testRespondingReapplyUsesNewInterval() {
+        // responding を開始（デフォルト 2.0秒）
+        sut.setPhaseAppearance(phase: .responding)
+        XCTAssertNotNil(sut.respondingAnimFrame)
+
+        // interval を変更して再適用
+        sut.respondingAnimInterval = 0.1
+        sut.setPhaseAppearance(phase: .responding)
+
+        // 新 interval でアニメーション再起動 → 短い待機で遷移確認
+        let exp = expectation(description: "responding re-applied with new interval")
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
+            if self.sut.respondingAnimFrame == .f03_leftDown {
+                timer.invalidate()
+                exp.fulfill()
+            }
+        }
+        wait(for: [exp], timeout: 1.0)
+        timer.invalidate()
+    }
+
+    func testReapplyNonAnimatingPhaseIsNoOp() {
+        // idle に設定 → setPhaseAppearance を2回呼んでもクラッシュしない
+        sut.setPhaseAppearance(phase: .idle)
+        sut.setPhaseAppearance(phase: .idle)
+        XCTAssertNil(sut.thinkingAnimFrame)
+        XCTAssertNil(sut.respondingAnimFrame)
+    }
+
     // MARK: - hitTest 透過
 
     func testHitTestReturnsNil() {
