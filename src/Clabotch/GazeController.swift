@@ -249,10 +249,12 @@ final class GazeController {
         let oldStatus = permissionStatus
         permissionStatus = trusted ? .granted : .notGranted
 
+        // 間隔調整は変化時以外でも不一致なら実行（起動直後の初回 poll 対策）
+        adjustPollInterval()
+
         if permissionStatus != oldStatus {
             os_log(.default, "👁 Gaze: 権限変化: %{public}@ → %{public}@",
                    String(describing: oldStatus), String(describing: permissionStatus))
-            adjustPollInterval()
             onPermissionChanged?(permissionStatus)
         }
     }

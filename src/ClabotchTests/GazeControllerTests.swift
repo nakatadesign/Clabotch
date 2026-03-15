@@ -15,7 +15,8 @@ final class GazeControllerOverrideTests: XCTestCase {
         sut = GazeController(
             axProvider: mockAX,
             workspaceProvider: mockWorkspace,
-            pollInterval: 0.05
+            pollInterval: 0.05,
+            pollIntervalNotGranted: 0.05
         )
     }
 
@@ -103,7 +104,8 @@ final class GazeControllerPermissionTests: XCTestCase {
         sut = GazeController(
             axProvider: mockAX,
             workspaceProvider: mockWorkspace,
-            pollInterval: 0.05
+            pollInterval: 0.05,
+            pollIntervalNotGranted: 0.05
         )
             }
 
@@ -197,7 +199,8 @@ final class GazeControllerTerminalTests: XCTestCase {
         sut = GazeController(
             axProvider: mockAX,
             workspaceProvider: mockWorkspace,
-            pollInterval: 0.05
+            pollInterval: 0.05,
+            pollIntervalNotGranted: 0.05
         )
         sut.statusItemCenterProvider = { CGPoint(x: 100, y: 10) }
             }
@@ -298,7 +301,8 @@ final class GazeControllerQuantizeTests: XCTestCase {
         sut = GazeController(
             axProvider: mockAX,
             workspaceProvider: mockWorkspace,
-            pollInterval: 0.05
+            pollInterval: 0.05,
+            pollIntervalNotGranted: 0.05
         )
         // origin: (1200, 1400) — メニューバー上（macOS Y=0 は画面下端）
         sut.statusItemCenterProvider = { CGPoint(x: 1200, y: 1400) }
@@ -378,7 +382,8 @@ final class GazeControllerPollingTests: XCTestCase {
         sut = GazeController(
             axProvider: mockAX,
             workspaceProvider: mockWorkspace,
-            pollInterval: 0.05
+            pollInterval: 0.05,
+            pollIntervalNotGranted: 0.05
         )
             }
 

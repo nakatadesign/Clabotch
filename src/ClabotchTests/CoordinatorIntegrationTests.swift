@@ -28,7 +28,8 @@ final class CoordinatorIntegrationTests: XCTestCase {
         gazeController = GazeController(
             axProvider: mockAX,
             workspaceProvider: mockWorkspace,
-            pollInterval: 0.1
+            pollInterval: 0.1,
+            pollIntervalNotGranted: 0.1
         )
         blinkController = BlinkController(
             intervalRange: 0.1...0.2,
