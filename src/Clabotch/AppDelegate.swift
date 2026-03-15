@@ -146,10 +146,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         eyeView?.showMenuFace()
-    }
-
-    func menuDidClose(_ menu: NSMenu) {
-        eyeView?.hideMenuFace()
+        // 瞬き程度の速さで元に戻す（120ms）
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+            self?.eyeView?.hideMenuFace()
+        }
     }
 
     @objc private func quitApp() {
