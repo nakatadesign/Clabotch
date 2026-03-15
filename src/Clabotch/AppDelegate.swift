@@ -201,13 +201,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// 保存済みのアニメーション速度倍率を EyeView に反映する。
     /// 現在 .thinking / .responding 表示中なら、新しい速度でアニメーションを即時再起動する。
+    /// .done / .error は再発火の副作用があるため、次回 phase 開始時から反映される。
     private func applyAnimationSpeed() {
         guard let eyeView else { return }
         let m = settingsStore.animationSpeedMultiplier
         eyeView.thinkingAnimInterval = 0.8 * m
         eyeView.respondingAnimInterval = 2.0 * m
+        eyeView.doneAnimInterval = 0.12 * m
+        eyeView.jumpInterval = 0.08 * m
+        eyeView.errorShakeInterval = 0.08 * m
 
         // 現在 phase が .thinking / .responding なら即時再適用
+        // .done / .error は再発火（jump/rainbow/shake）の副作用があるため即時再適用しない
         let phase = stateMachine.displayPhase
         switch phase {
         case .thinking, .responding:

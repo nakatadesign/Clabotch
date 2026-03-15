@@ -84,17 +84,20 @@ final class ClabotchEyeView: NSView {
         (.closed, 0.12),  // 120ms
     ]
 
-    /// DONE アニメーション各ステップの間隔
-    static let doneAnimInterval: TimeInterval = 0.12
+    /// DONE アニメーション各ステップの間隔。
+    /// テストや実機チューニングのために変更可能。
+    var doneAnimInterval: TimeInterval = 0.12
 
-    /// ERROR アニメーション各ステップの間隔
-    static let errorShakeInterval: TimeInterval = 0.08
+    /// ERROR アニメーション各ステップの間隔。
+    /// テストや実機チューニングのために変更可能。
+    var errorShakeInterval: TimeInterval = 0.08
 
     /// ジャンプアニメーション: Y オフセット（ポイント）のシーケンス（§5 定義）
     static let jumpSequence: [CGFloat] = [6, 12, 4, 0, 4, 8, 2, 0]
 
-    /// ジャンプアニメーション各ステップの間隔
-    static let jumpInterval: TimeInterval = 0.08
+    /// ジャンプアニメーション各ステップの間隔。
+    /// テストや実機チューニングのために変更可能。
+    var jumpInterval: TimeInterval = 0.08
 
     // MARK: - 状態（private(set) でテストから参照可能）
 
@@ -330,12 +333,12 @@ final class ClabotchEyeView: NSView {
     /// DONE アニメーションを開始する。
     private func startDoneAnimation() {
         os_log(.default, "🎬 EyeView: DONE 瞳スピンアニメーション開始（%d ステップ, 間隔=%.0fms）",
-               Self.doneAnimSequence.count, Self.doneAnimInterval * 1000)
+               Self.doneAnimSequence.count, doneAnimInterval * 1000)
         animationStep = 0
         doneAnimPupilFrame = Self.doneAnimSequence[0]
 
         animationTimer = Timer.scheduledTimer(
-            withTimeInterval: Self.doneAnimInterval,
+            withTimeInterval: doneAnimInterval,
             repeats: true
         ) { [weak self] timer in
             guard let self else { timer.invalidate(); return }
@@ -358,12 +361,12 @@ final class ClabotchEyeView: NSView {
     /// ERROR シェイクアニメーションを開始する。
     private func startErrorShakeAnimation() {
         os_log(.default, "🎬 EyeView: ERROR シェイクアニメーション開始（%d ステップ, 間隔=%.0fms）",
-               Self.errorShakeSequence.count, Self.errorShakeInterval * 1000)
+               Self.errorShakeSequence.count, errorShakeInterval * 1000)
         animationStep = 0
         shakeYOffset = Self.errorShakeSequence[0]
 
         animationTimer = Timer.scheduledTimer(
-            withTimeInterval: Self.errorShakeInterval,
+            withTimeInterval: errorShakeInterval,
             repeats: true
         ) { [weak self] timer in
             guard let self else { timer.invalidate(); return }
@@ -387,7 +390,7 @@ final class ClabotchEyeView: NSView {
     func performJump() {
         dispatchPrecondition(condition: .onQueue(.main))
         os_log(.default, "🎬 EyeView: ジャンプアニメーション開始（%d ステップ, 間隔=%.0fms）",
-               Self.jumpSequence.count, Self.jumpInterval * 1000)
+               Self.jumpSequence.count, jumpInterval * 1000)
         stopJump()
         isJumping = true
         jumpStep = 0
@@ -396,7 +399,7 @@ final class ClabotchEyeView: NSView {
         applyJumpOffset(Self.jumpSequence[0])
 
         jumpTimer = Timer.scheduledTimer(
-            withTimeInterval: Self.jumpInterval,
+            withTimeInterval: jumpInterval,
             repeats: true
         ) { [weak self] timer in
             guard let self else { timer.invalidate(); return }

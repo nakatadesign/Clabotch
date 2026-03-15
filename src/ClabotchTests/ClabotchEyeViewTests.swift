@@ -263,10 +263,11 @@ final class ClabotchEyeViewTests: XCTestCase {
 
     func testDoneAnimationSequenceProgresses() {
         // アニメーションが進行して完了後にハッピー目に切り替わることを確認
+        sut.doneAnimInterval = 0.02
         sut.setPhaseAppearance(phase: .done(elapsedMs: 3000))
 
         let exp = expectation(description: "DONE アニメーション完了 → ハッピー目")
-        let totalDuration = ClabotchEyeView.doneAnimInterval * Double(ClabotchEyeView.doneAnimSequence.count)
+        let totalDuration = sut.doneAnimInterval * Double(ClabotchEyeView.doneAnimSequence.count)
         DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration + 0.1) {
             // スピン完了後は doneAnimPupilFrame=nil, showHappyEyes=true
             XCTAssertNil(self.sut.doneAnimPupilFrame)
@@ -304,10 +305,11 @@ final class ClabotchEyeViewTests: XCTestCase {
 
     func testErrorShakeSequenceProgresses() {
         // シェイクアニメーションが進行して元に戻ることを確認
+        sut.errorShakeInterval = 0.02
         sut.setPhaseAppearance(phase: .error(toolName: "Bash", message: nil))
 
         let exp = expectation(description: "ERROR シェイク完了")
-        let totalDuration = ClabotchEyeView.errorShakeInterval * Double(ClabotchEyeView.errorShakeSequence.count)
+        let totalDuration = sut.errorShakeInterval * Double(ClabotchEyeView.errorShakeSequence.count)
         DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration + 0.1) {
             // シェイク完了後は Y オフセットが 0 に戻る
             XCTAssertEqual(self.sut.shakeYOffset, 0)
@@ -383,10 +385,11 @@ final class ClabotchEyeViewTests: XCTestCase {
     }
 
     func testJumpCompletesAndResetsToOrigin() {
+        sut.jumpInterval = 0.02
         sut.performJump()
 
         let exp = expectation(description: "ジャンプ完了")
-        let totalDuration = ClabotchEyeView.jumpInterval * Double(ClabotchEyeView.jumpSequence.count)
+        let totalDuration = sut.jumpInterval * Double(ClabotchEyeView.jumpSequence.count)
         DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration + 0.1) {
             XCTAssertEqual(self.sut.frame.origin.y, 0, "ジャンプ完了後は原点に戻るべき")
             XCTAssertFalse(self.sut.isJumping, "ジャンプ完了後は isJumping=false であるべき")
