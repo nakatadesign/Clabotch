@@ -22,8 +22,7 @@ final class GazeControllerOverrideTests: XCTestCase {
     override func tearDown() {
         sut.stopPolling()
         sut = nil
-        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
-        super.tearDown()
+                super.tearDown()
     }
 
     func testSetOverrideFixedChangesMode() {
@@ -38,22 +37,21 @@ final class GazeControllerOverrideTests: XCTestCase {
         sut.setOverride(.fixed(frame: .f01_center, reason: .mascotStateOverride))
         sut.setOverride(.none)
 
-        // AX 権限なし → update() で permissionNotDetermined に再計算される
+        // AX 権限なし → update() で permissionNotGranted に再計算される
         sut.startPolling()
 
         let exp = expectation(description: "poll が発火して再計算される")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             // override が none なので update() が走り、permission に基づく値になる
             XCTAssertEqual(self.sut.gazeFrame, .f03_leftDown)
-            XCTAssertEqual(self.sut.mode, .fixed(.f03_leftDown, reason: .permissionNotDetermined))
+            XCTAssertEqual(self.sut.mode, .fixed(.f03_leftDown, reason: .permissionNotGranted))
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)
     }
 
     func testOverridePriorityOverPermission() {
-        // 権限を denied にする
-        UserDefaults.standard.set(true, forKey: "didRequestAccessibility")
+        // 権限を notGranted にする
         mockAX.isTrusted = false
 
         // override を設定
@@ -107,24 +105,21 @@ final class GazeControllerPermissionTests: XCTestCase {
             workspaceProvider: mockWorkspace,
             pollInterval: 0.05
         )
-        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
-    }
+            }
 
     override func tearDown() {
         sut.stopPolling()
         sut = nil
-        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
-        super.tearDown()
+                super.tearDown()
     }
 
-    func testPermissionNotDetermined() {
+    func testPermissionNotGranted() {
         mockAX.isTrusted = false
-        // didRequestAccessibility = false (default)
 
         sut.startPolling()
         let exp = expectation(description: "poll 発火")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertEqual(self.sut.permissionStatus, .notDetermined)
+            XCTAssertEqual(self.sut.permissionStatus, .notGranted)
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)
@@ -142,27 +137,13 @@ final class GazeControllerPermissionTests: XCTestCase {
         wait(for: [exp], timeout: 1.0)
     }
 
-    func testPermissionDenied() {
+    func testPermissionNotGrantedFixedGaze() {
         mockAX.isTrusted = false
-        UserDefaults.standard.set(true, forKey: "didRequestAccessibility")
 
         sut.startPolling()
         let exp = expectation(description: "poll 発火")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertEqual(self.sut.permissionStatus, .denied)
-            exp.fulfill()
-        }
-        wait(for: [exp], timeout: 1.0)
-    }
-
-    func testPermissionDeniedFixedF02() {
-        mockAX.isTrusted = false
-        UserDefaults.standard.set(true, forKey: "didRequestAccessibility")
-
-        sut.startPolling()
-        let exp = expectation(description: "poll 発火")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertEqual(self.sut.mode, .fixed(.f03_leftDown, reason: .permissionDenied))
+            XCTAssertEqual(self.sut.mode, .fixed(.f03_leftDown, reason: .permissionNotGranted))
             XCTAssertEqual(self.sut.gazeFrame, .f03_leftDown)
             exp.fulfill()
         }
@@ -172,28 +153,32 @@ final class GazeControllerPermissionTests: XCTestCase {
     func testRequestPermissionCallsRequestTrust() {
         mockAX.isTrusted = false
 
-        sut.requestPermissionIfNeeded { _ in }
+        sut.requestPermission()
         XCTAssertTrue(mockAX.requestTrustCalled)
     }
 
-    func testRequestPermissionSetsDidRequestFlag() {
+    func testOnPermissionChangedCallback() {
         mockAX.isTrusted = false
-
-        sut.requestPermissionIfNeeded { _ in }
-        XCTAssertTrue(UserDefaults.standard.bool(forKey: "didRequestAccessibility"))
-    }
-
-    func testRequestPermissionCompletionCalled() {
-        mockAX.isTrusted = false
-        mockAX.requestTrustResult = false
-
-        let exp = expectation(description: "completion が呼ばれる")
-        sut.requestPermissionIfNeeded { status in
-            // 1秒後のチェックで isTrusted=false, didRequest=true → denied
-            XCTAssertEqual(status, .denied)
-            exp.fulfill()
+        var receivedStatuses: [GazePermissionStatus] = []
+        sut.onPermissionChanged = { status in
+            receivedStatuses.append(status)
         }
-        wait(for: [exp], timeout: 3.0)
+
+        sut.startPolling()
+
+        let exp = expectation(description: "権限変化コールバック")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            // 初期値 notGranted → polling で notGranted → 変化なし → callback なし
+            XCTAssertTrue(receivedStatuses.isEmpty)
+
+            // isTrusted を true に変更 → 次の poll で granted に変化 → callback 発火
+            self.mockAX.isTrusted = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                XCTAssertEqual(receivedStatuses, [.granted])
+                exp.fulfill()
+            }
+        }
+        wait(for: [exp], timeout: 2.0)
     }
 }
 
@@ -215,14 +200,12 @@ final class GazeControllerTerminalTests: XCTestCase {
             pollInterval: 0.05
         )
         sut.statusItemCenterProvider = { CGPoint(x: 100, y: 10) }
-        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
-    }
+            }
 
     override func tearDown() {
         sut.stopPolling()
         sut = nil
-        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
-        super.tearDown()
+                super.tearDown()
     }
 
     func testSupportedTerminalTracking() {
@@ -319,14 +302,12 @@ final class GazeControllerQuantizeTests: XCTestCase {
         )
         // origin: (1200, 1400) — メニューバー上（macOS Y=0 は画面下端）
         sut.statusItemCenterProvider = { CGPoint(x: 1200, y: 1400) }
-        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
-    }
+            }
 
     override func tearDown() {
         sut.stopPolling()
         sut = nil
-        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
-        super.tearDown()
+                super.tearDown()
     }
 
     func testQuantizeRightDown() {
@@ -399,14 +380,12 @@ final class GazeControllerPollingTests: XCTestCase {
             workspaceProvider: mockWorkspace,
             pollInterval: 0.05
         )
-        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
-    }
+            }
 
     override func tearDown() {
         sut.stopPolling()
         sut = nil
-        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
-        super.tearDown()
+                super.tearDown()
     }
 
     func testStartPollingCreatesTimer() {
@@ -416,13 +395,13 @@ final class GazeControllerPollingTests: XCTestCase {
         }
 
         // 初期値 f03_leftDown → update() で permission check → f03_leftDown（同値なのでコールバックなし）
-        // ただし permissionStatus が .notDetermined に変わるので mode は変わる
+        // ただし permissionStatus が .notGranted に変わるので mode は変わる
         sut.startPolling()
 
         let exp = expectation(description: "poll が少なくとも1回発火")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             // polling が動いていることの確認: permissionStatus が notDetermined になっている
-            XCTAssertEqual(self.sut.permissionStatus, .notDetermined)
+            XCTAssertEqual(self.sut.permissionStatus, .notGranted)
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)
@@ -463,7 +442,7 @@ final class GazeControllerPollingTests: XCTestCase {
         let exp = expectation(description: "正常動作")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             // 異常なくタイマーが1つだけ動いていることを確認
-            XCTAssertEqual(self.sut.permissionStatus, .notDetermined)
+            XCTAssertEqual(self.sut.permissionStatus, .notGranted)
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)
@@ -492,14 +471,12 @@ final class GazeControllerAttentionTests: XCTestCase {
             now: { [unowned self] in self.currentTime }
         )
         sut.statusItemCenterProvider = { CGPoint(x: 100, y: 10) }
-        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
-    }
+            }
 
     override func tearDown() {
         sut.stopPolling()
         sut = nil
-        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
-        super.tearDown()
+                super.tearDown()
     }
 
     func testLookAtTerminalActivatesAttention() {
@@ -730,14 +707,12 @@ final class GazeControllerClickTests: XCTestCase {
             now: { [unowned self] in self.currentTime }
         )
         sut.statusItemCenterProvider = { CGPoint(x: 100, y: 10) }
-        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
-    }
+            }
 
     override func tearDown() {
         sut.stopPolling()
         sut = nil
-        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
-        super.tearDown()
+                super.tearDown()
     }
 
     func testClickMonitorStartsWithPolling() {

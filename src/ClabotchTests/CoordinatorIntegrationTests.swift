@@ -52,7 +52,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         )
         binder.bind()
 
-        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
+
 
         // 起動順は AppDelegate と同じ
         stateMachine.start()
@@ -64,7 +64,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         ephemeralBubbleSpy.dismiss()
         blinkController.setBlinking(enabled: false)
         gazeController.stopPolling()
-        UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
+
         super.tearDown()
     }
 
