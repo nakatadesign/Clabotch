@@ -115,9 +115,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     break  // notDetermined のまま続行（frame02 固定）
                 }
             }
-        } else {
-            // 再ビルド等で AX 権限がリセットされた場合、自動でリクエストする
-            gazeController.requestPermissionIfNeeded { _ in }
+        } else if !AXIsProcessTrusted() {
+            // 再起動・リビルド等で AX 権限がリセットされた場合、システム設定を開くよう案内
+            showAccessibilityAlert()
         }
     }
 
@@ -138,6 +138,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
+    }
+
+    // MARK: - AX 権限復旧案内
+
+    /// テスト seam: アラートの表示と応答取得を差し替え可能にする。
+    static var accessibilityAlertPresenter: () -> NSApplication.ModalResponse = {
+        let alert = NSAlert()
+        alert.messageText = "アクセシビリティの許可が必要です"
+        alert.informativeText = """
+            視線追跡にはアクセシビリティの許可が必要ですが、\
+            再起動やアップデートにより許可がリセットされたようです。
+
+            「システム設定を開く」を押して、Clabotch のチェックを\
+            一度外してから再度チェックを入れてください。
+            """
+        alert.alertStyle = .warning
+        // LSUIElement アプリはアイコンが自動設定されないため明示指定
+        alert.icon = NSApp.applicationIconImage
+        alert.addButton(withTitle: "システム設定を開く")
+        alert.addButton(withTitle: "後で")
+        return alert.runModal()
+    }
+
+    private func showAccessibilityAlert() {
+        let response = Self.accessibilityAlertPresenter()
+        if response == .alertFirstButtonReturn {
+            // アクセシビリティ設定画面を直接開く
+            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private func statusItemAnchor() -> CGPoint? {

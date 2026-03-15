@@ -31,6 +31,8 @@ final class OnboardingWindowController {
             ※ 許可しなくても機能の95%は動作します。
             """
         alert.alertStyle = .informational
+        // LSUIElement アプリはアイコンが自動設定されないため明示指定
+        alert.icon = NSApp.applicationIconImage
 
         // ボタン追加（先に追加したものが右側 = デフォルト）
         alert.addButton(withTitle: "許可する")
