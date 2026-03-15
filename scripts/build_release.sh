@@ -4,14 +4,20 @@
 # 使い方:
 #   ./scripts/build_release.sh                    # ビルド + DMG（署名付き）
 #   ./scripts/build_release.sh --unsigned         # ビルド + DMG（署名なし、テスト用）
-#   ./scripts/build_release.sh --notarize         # ビルド + DMG + Notarization
+#   ./scripts/build_release.sh --notarize         # ビルド + DMG + Notarization（環境変数方式）
+#   ./scripts/build_release.sh --notarize --keychain-profile PROFILE
+#                                                 # ビルド + DMG + Notarization（keychain profile 方式）
 #   ./scripts/build_release.sh --skip-build       # DMG のみ（ビルド済み前提）
+#   ./scripts/build_release.sh --verify-only      # 既存 DMG の署名 / Gatekeeper 検証のみ
 #
 # 前提条件:
 #   - xcodegen がインストール済み
 #   - Developer ID Application 証明書がキーチェーンにインストール済み
-#   - Notarization 時: NOTARIZE_APPLE_ID, NOTARIZE_TEAM_ID, NOTARIZE_PASSWORD 環境変数
-#     (NOTARIZE_PASSWORD は app-specific password または keychain profile)
+#   - DEVELOPMENT_TEAM 環境変数（Apple Developer Team ID）
+#   - Notarization 時（環境変数方式）:
+#       NOTARIZE_APPLE_ID, NOTARIZE_TEAM_ID, NOTARIZE_PASSWORD
+#   - Notarization 時（keychain profile 方式）:
+#       事前に xcrun notarytool store-credentials <PROFILE> で登録済み
 #
 # 出力:
 #   dist/Clabotch-<version>.dmg
@@ -27,13 +33,32 @@ DERIVED_DATA="${BUILD_DIR}/DerivedData"
 NOTARIZE=false
 SKIP_BUILD=false
 UNSIGNED=false
+VERIFY_ONLY=false
+KEYCHAIN_PROFILE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --notarize) NOTARIZE=true; shift ;;
     --skip-build) SKIP_BUILD=true; shift ;;
     --unsigned) UNSIGNED=true; shift ;;
+    --verify-only) VERIFY_ONLY=true; shift ;;
+    --keychain-profile)
+      if [[ $# -lt 2 ]]; then
+        echo "ERROR: --keychain-profile にはプロファイル名が必要です" >&2
+        exit 1
+      fi
+      KEYCHAIN_PROFILE="$2"; shift 2 ;;
     --help|-h)
-      sed -n '2,/^set /{ /^#/s/^# \?//p }' "$0"
+      echo "使い方: ./scripts/build_release.sh [OPTIONS]"
+      echo ""
+      echo "  (なし)                 署名付きビルド + DMG"
+      echo "  --unsigned             署名なしビルド + DMG（テスト用）"
+      echo "  --notarize             ビルド + DMG + Notarization"
+      echo "  --keychain-profile P   Notarization に keychain profile を使用"
+      echo "  --skip-build           DMG のみ作成（ビルド済み前提）"
+      echo "  --verify-only          既存成果物の署名 / Gatekeeper 検証"
+      echo ""
+      echo "前提: DEVELOPMENT_TEAM 環境変数（署名ビルド時）"
+      echo "詳細: docs/DISTRIBUTION.md"
       exit 0
       ;;
     *) echo "ERROR: 不明なオプション: $1" >&2; exit 1 ;;
@@ -53,14 +78,69 @@ if [[ -z "${VERSION}" ]]; then
 fi
 echo "==> Clabotch v${VERSION}"
 
-# Notarization の環境変数チェック
-if [[ "${NOTARIZE}" == "true" ]]; then
-  for var in NOTARIZE_APPLE_ID NOTARIZE_TEAM_ID NOTARIZE_PASSWORD; do
-    if [[ -z "${!var:-}" ]]; then
-      echo "ERROR: ${var} が設定されていません" >&2
-      exit 1
+# --verify-only モード
+if [[ "${VERIFY_ONLY}" == "true" ]]; then
+  DMG_PATH="${DIST_DIR}/Clabotch-${VERSION}.dmg"
+  APP_PATH="${BUILD_DIR}/app/Clabotch.app"
+
+  echo "==> 検証モード"
+  if [[ -d "${APP_PATH}" ]]; then
+    echo "==> .app コード署名検証"
+    if codesign --verify --deep --strict "${APP_PATH}" 2>/dev/null; then
+      echo "    署名: OK"
+      codesign -dvv "${APP_PATH}" 2>&1 | grep -E "^(Authority|TeamIdentifier)" || true
+    else
+      echo "    署名: NG"
     fi
-  done
+    echo "==> .app Gatekeeper 検証"
+    if spctl --assess --type execute "${APP_PATH}" 2>&1; then
+      echo "    Gatekeeper (.app): OK"
+    else
+      echo "    Gatekeeper (.app): NG"
+    fi
+  else
+    echo "    .app が見つかりません: ${APP_PATH}"
+  fi
+  if [[ -f "${DMG_PATH}" ]]; then
+    echo "==> DMG Gatekeeper 検証"
+    if spctl --assess --type open --context context:primary-signature "${DMG_PATH}" 2>&1; then
+      echo "    Gatekeeper: OK"
+    else
+      echo "    Gatekeeper: NG（notarization が必要、または署名不備）"
+    fi
+    echo "==> Staple 確認"
+    xcrun stapler validate "${DMG_PATH}" 2>&1 || echo "    Staple: 未適用"
+  else
+    echo "    DMG が見つかりません: ${DMG_PATH}"
+  fi
+  exit 0
+fi
+
+# DEVELOPMENT_TEAM チェック（署名ビルド時）
+if [[ "${UNSIGNED}" == "false" ]]; then
+  if [[ -z "${DEVELOPMENT_TEAM:-}" ]]; then
+    echo "ERROR: DEVELOPMENT_TEAM 環境変数が設定されていません" >&2
+    echo "  export DEVELOPMENT_TEAM=\"YOUR_TEAM_ID\"" >&2
+    echo "  Apple Developer の Membership ページで確認できます" >&2
+    exit 1
+  fi
+fi
+
+# Notarization の認証情報チェック
+if [[ "${NOTARIZE}" == "true" ]]; then
+  if [[ -n "${KEYCHAIN_PROFILE}" ]]; then
+    echo "    認証方式: keychain profile (${KEYCHAIN_PROFILE})"
+  else
+    for var in NOTARIZE_APPLE_ID NOTARIZE_TEAM_ID NOTARIZE_PASSWORD; do
+      if [[ -z "${!var:-}" ]]; then
+        echo "ERROR: ${var} が設定されていません" >&2
+        echo "  --keychain-profile を使うか、環境変数を設定してください" >&2
+        echo "  詳細: docs/DISTRIBUTION.md" >&2
+        exit 1
+      fi
+    done
+    echo "    認証方式: 環境変数"
+  fi
 fi
 
 # ビルド
@@ -74,7 +154,8 @@ if [[ "${SKIP_BUILD}" == "false" ]]; then
     SIGN_ARGS+=(CODE_SIGNING_ALLOWED=NO)
     echo "==> Release ビルド（署名なし）"
   else
-    echo "==> Release ビルド（署名付き）"
+    SIGN_ARGS+=("DEVELOPMENT_TEAM=${DEVELOPMENT_TEAM}")
+    echo "==> Release ビルド（署名付き, Team=${DEVELOPMENT_TEAM}）"
   fi
 
   xcodebuild archive \
@@ -90,6 +171,7 @@ if [[ "${SKIP_BUILD}" == "false" ]]; then
 
   echo "==> .app をエクスポート"
   mkdir -p "${BUILD_DIR}/app"
+  rm -rf "${BUILD_DIR}/app/Clabotch.app"
   cp -R "${BUILD_DIR}/Clabotch.xcarchive/Products/Applications/Clabotch.app" \
         "${BUILD_DIR}/app/Clabotch.app"
 else
@@ -107,8 +189,26 @@ echo "==> コード署名を検証"
 if codesign --verify --deep --strict "${APP_PATH}" 2>/dev/null; then
   echo "    署名: OK"
   codesign -dvv "${APP_PATH}" 2>&1 | grep -E "^(Authority|TeamIdentifier|Signature)" || true
+  # Hardened Runtime 確認
+  if codesign -d --entitlements - "${APP_PATH}" 2>/dev/null | grep -q "com.apple.security"; then
+    echo "    Entitlements: OK"
+  fi
 else
   echo "    警告: コード署名なし、または無効（Developer ID 証明書をインストールしてください）"
+  if [[ "${NOTARIZE}" == "true" ]]; then
+    echo "ERROR: 署名なしでは notarization できません" >&2
+    exit 1
+  fi
+fi
+
+# Gatekeeper 事前検証（署名済みの場合）
+if [[ "${UNSIGNED}" == "false" ]]; then
+  echo "==> Gatekeeper 事前検証（.app）"
+  if spctl --assess --type execute "${APP_PATH}" 2>&1; then
+    echo "    Gatekeeper (.app): OK"
+  else
+    echo "    Gatekeeper (.app): NG（notarization 前は正常）"
+  fi
 fi
 
 # DMG 作成
@@ -139,14 +239,26 @@ echo "    サイズ: $(du -h "${DMG_PATH}" | awk '{print $1}')"
 # Notarization
 if [[ "${NOTARIZE}" == "true" ]]; then
   echo "==> Notarization 投入"
-  xcrun notarytool submit "${DMG_PATH}" \
-    --apple-id "${NOTARIZE_APPLE_ID}" \
-    --team-id "${NOTARIZE_TEAM_ID}" \
-    --password "${NOTARIZE_PASSWORD}" \
-    --wait
+
+  NOTARY_ARGS=("${DMG_PATH}" --wait)
+  if [[ -n "${KEYCHAIN_PROFILE}" ]]; then
+    NOTARY_ARGS+=(--keychain-profile "${KEYCHAIN_PROFILE}")
+  else
+    NOTARY_ARGS+=(
+      --apple-id "${NOTARIZE_APPLE_ID}"
+      --team-id "${NOTARIZE_TEAM_ID}"
+      --password "${NOTARIZE_PASSWORD}"
+    )
+  fi
+
+  xcrun notarytool submit "${NOTARY_ARGS[@]}"
 
   echo "==> Staple"
   xcrun stapler staple "${DMG_PATH}"
+
+  echo "==> Notarization 後の検証"
+  xcrun stapler validate "${DMG_PATH}"
+  spctl --assess --type open --context context:primary-signature "${DMG_PATH}" 2>&1 || true
 
   echo "==> Notarization 完了"
 fi
@@ -157,3 +269,7 @@ echo "DMG: ${DMG_PATH}"
 if [[ "${NOTARIZE}" == "true" ]]; then
   echo "Notarization: stapled"
 fi
+echo ""
+echo "次のステップ:"
+echo "  検証: ./scripts/build_release.sh --verify-only"
+echo "  配布: ${DMG_PATH} をユーザーに配布"
