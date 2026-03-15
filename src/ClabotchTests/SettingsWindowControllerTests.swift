@@ -174,3 +174,67 @@ final class StateMachineUpdateSleepThresholdTests: XCTestCase {
         waitForExpectations(timeout: 1) { _ in reTimer.invalidate() }
     }
 }
+
+// MARK: - StateMachine.wakeFromSleep テスト
+
+@MainActor
+final class StateMachineWakeFromSleepTests: XCTestCase {
+
+    func testWakeFromSleepTransitionsToIdle() {
+        let sm = StateMachine(sleepThreshold: 0.05)
+        sm.start()
+
+        // sleeping に入るのを待つ
+        let sleepExp = expectation(description: "enter sleep")
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { timer in
+            if sm.displayPhase == .sleeping {
+                timer.invalidate()
+                sleepExp.fulfill()
+            }
+        }
+        waitForExpectations(timeout: 1) { _ in timer.invalidate() }
+        XCTAssertEqual(sm.displayPhase, .sleeping)
+
+        // wakeFromSleep → idle に復帰
+        sm.wakeFromSleep()
+        XCTAssertEqual(sm.displayPhase, .idle)
+    }
+
+    func testWakeFromSleepNoOpWhenNotSleeping() {
+        let sm = StateMachine(sleepThreshold: 300)
+        sm.start()
+        XCTAssertEqual(sm.displayPhase, .idle)
+
+        // idle 中に wakeFromSleep → 何も起きない
+        sm.wakeFromSleep()
+        XCTAssertEqual(sm.displayPhase, .idle)
+    }
+
+    func testWakeFromSleepRestartsTimer() {
+        let sm = StateMachine(sleepThreshold: 0.05)
+        sm.start()
+
+        // sleeping に入るのを待つ
+        let sleepExp = expectation(description: "enter sleep")
+        let timer1 = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { timer in
+            if sm.displayPhase == .sleeping {
+                timer.invalidate()
+                sleepExp.fulfill()
+            }
+        }
+        waitForExpectations(timeout: 1) { _ in timer1.invalidate() }
+
+        // wakeFromSleep → idle → 再び sleeping に入る
+        sm.wakeFromSleep()
+        XCTAssertEqual(sm.displayPhase, .idle)
+
+        let reSleepExp = expectation(description: "re-enter sleep after wake")
+        let timer2 = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { timer in
+            if sm.displayPhase == .sleeping {
+                timer.invalidate()
+                reSleepExp.fulfill()
+            }
+        }
+        waitForExpectations(timeout: 1) { _ in timer2.invalidate() }
+    }
+}

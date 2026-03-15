@@ -834,4 +834,31 @@ final class GazeControllerClickTests: XCTestCase {
         currentTime = currentTime.addingTimeInterval(0.2)
         XCTAssertTrue(sut.isAttentionActive)
     }
+
+    func testTerminalClickFiresOnTerminalClicked() {
+        mockWorkspace.bundleIdentifier = "com.apple.Terminal"
+        mockWorkspace.pid = 1234
+        mockAX.terminalCenter = CGPoint(x: 500, y: 400)
+
+        var callbackFired = false
+        sut.onTerminalClicked = { callbackFired = true }
+
+        sut.startPolling()
+        mockEventMonitor.simulateClick()
+
+        XCTAssertTrue(callbackFired)
+    }
+
+    func testNonTerminalClickDoesNotFireOnTerminalClicked() {
+        mockWorkspace.bundleIdentifier = "com.apple.Safari"
+        mockWorkspace.pid = 1234
+
+        var callbackFired = false
+        sut.onTerminalClicked = { callbackFired = true }
+
+        sut.startPolling()
+        mockEventMonitor.simulateClick()
+
+        XCTAssertFalse(callbackFired)
+    }
 }
