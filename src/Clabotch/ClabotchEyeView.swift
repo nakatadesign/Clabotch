@@ -295,9 +295,13 @@ final class ClabotchEyeView: NSView {
                 self.doneAnimPupilFrame = Self.doneAnimSequence[self.animationStep]
                 self.needsDisplay = true
             } else {
-                // アニメーション完了 — 最終フレームの瞳位置を維持
+                // アニメーション完了 — ハッピー目（^_^）に切替
                 timer.invalidate()
                 self.animationTimer = nil
+                self.showSurprise = false
+                self.showSleepingEyes = true  // ^_^ 描画を流用
+                self.doneAnimPupilFrame = nil
+                self.needsDisplay = true
             }
         }
     }
