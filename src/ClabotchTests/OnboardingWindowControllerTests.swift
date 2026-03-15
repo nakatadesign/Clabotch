@@ -76,3 +76,45 @@ final class OnboardingWindowControllerTests: XCTestCase {
                        "ダイアログ完了後は shouldShow=false であるべき")
     }
 }
+
+// MARK: - AX 権限復旧アラートのテスト
+
+final class AccessibilityAlertTests: XCTestCase {
+
+    private var originalPresenter: (() -> NSApplication.ModalResponse)!
+
+    override func setUp() {
+        super.setUp()
+        originalPresenter = AppDelegate.accessibilityAlertPresenter
+    }
+
+    override func tearDown() {
+        AppDelegate.accessibilityAlertPresenter = originalPresenter
+        super.tearDown()
+    }
+
+    func testAccessibilityAlertPresenterIsReplaceable() {
+        // テスト seam が機能することを確認
+        var called = false
+        AppDelegate.accessibilityAlertPresenter = {
+            called = true
+            return .alertSecondButtonReturn
+        }
+
+        let result = AppDelegate.accessibilityAlertPresenter()
+        XCTAssertTrue(called)
+        XCTAssertEqual(result, .alertSecondButtonReturn)
+    }
+
+    func testAccessibilityAlertFirstButtonReturnsCorrectResponse() {
+        AppDelegate.accessibilityAlertPresenter = { .alertFirstButtonReturn }
+        let result = AppDelegate.accessibilityAlertPresenter()
+        XCTAssertEqual(result, .alertFirstButtonReturn, "「システム設定を開く」は alertFirstButtonReturn")
+    }
+
+    func testAccessibilityAlertSecondButtonReturnsCorrectResponse() {
+        AppDelegate.accessibilityAlertPresenter = { .alertSecondButtonReturn }
+        let result = AppDelegate.accessibilityAlertPresenter()
+        XCTAssertEqual(result, .alertSecondButtonReturn, "「後で」は alertSecondButtonReturn")
+    }
+}
