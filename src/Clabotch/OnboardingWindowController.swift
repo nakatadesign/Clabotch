@@ -1,7 +1,7 @@
 import AppKit
 
 /// §11.7 オンボーディング UI — 初回起動時の AX 権限リクエストダイアログ。
-/// 「後で」= permissionNotDetermined のまま、「許可する」= requestPermissionIfNeeded() 呼び出し。
+/// 「後で」= notGranted のまま続行、「許可する」= requestPermission() で macOS ダイアログを表示。
 final class OnboardingWindowController {
 
     enum Result: Equatable {

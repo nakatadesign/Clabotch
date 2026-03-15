@@ -110,7 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 switch result {
                 case .allowClicked:
-                    self.gazeController.requestPermissionIfNeeded { _ in }
+                    self.gazeController.requestPermission()
                 case .laterClicked:
                     break  // notDetermined のまま続行（frame02 固定）
                 }

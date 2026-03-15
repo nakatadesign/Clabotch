@@ -11,17 +11,15 @@ enum GazeFrame: Equatable, CaseIterable {
     case f07_left         // 左（水平）
 }
 
-/// AX 権限の状態。
+/// AX 権限の状態。AXIsProcessTrusted() を唯一の真実の源泉とする2値。
 enum GazePermissionStatus: Equatable {
-    case notDetermined   // 未確認（初回起動）
-    case granted         // 許可済み → フル視線追跡
-    case denied          // 拒否済み → 固定視線 frame02
+    case granted         // AXIsProcessTrusted()=true → フル視線追跡
+    case notGranted      // AXIsProcessTrusted()=false → 固定視線
 }
 
 /// 固定視線の理由。
 enum FixedGazeReason: Equatable {
-    case permissionDenied
-    case permissionNotDetermined
+    case permissionNotGranted
     case terminalNotFound
     case terminalInOtherSpace
     case terminalMinimized

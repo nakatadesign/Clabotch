@@ -15,12 +15,15 @@ final class GazeController {
 
     private(set) var mode: GazeMode = .fixed(.f03_leftDown, reason: .terminalNotFound)
     private(set) var gazeFrame: GazeFrame = .f03_leftDown
-    private(set) var permissionStatus: GazePermissionStatus = .notDetermined
+    private(set) var permissionStatus: GazePermissionStatus = .notGranted
 
     // MARK: - Callback
 
     /// gazeFrame が変更されたときに呼ばれる。描画層が購読する。
     var onGazeFrameChanged: ((GazeFrame) -> Void)?
+
+    /// AX 権限状態が変化したときに呼ばれる。
+    var onPermissionChanged: ((GazePermissionStatus) -> Void)?
 
     // MARK: - 外部依存の注入
 
@@ -59,12 +62,6 @@ final class GazeController {
     /// AX 属性ダンプ確認後に supportedBundles へ昇格させる候補
     /// Warp は計画 009 で AX 属性ダンプ検証済み → supportedBundles に昇格済み
     private let tentativeBundles: Set<String> = []
-
-    // MARK: - UserDefaults キー
-
-    private enum PermissionKeys {
-        static let didRequestAccessibility = "didRequestAccessibility"
-    }
 
     // MARK: - Init
 
@@ -140,22 +137,11 @@ final class GazeController {
         eventMonitor.stopMonitoring()
     }
 
-    /// AX 権限のリクエスト（初回起動時）。
-    func requestPermissionIfNeeded(completion: @escaping (GazePermissionStatus) -> Void) {
+    /// AX 権限のリクエスト。macOS のシステムダイアログを表示する。
+    /// 権限の結果はポーリングで自動検知されるため、completion は即座に呼ばれる。
+    func requestPermission() {
         dispatchPrecondition(condition: .onQueue(.main))
-        checkPermission()
-        guard permissionStatus == .notDetermined else {
-            completion(permissionStatus)
-            return
-        }
-
-        UserDefaults.standard.set(true, forKey: PermissionKeys.didRequestAccessibility)
         axProvider.requestTrust(prompt: true)
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            self?.checkPermission()
-            completion(self?.permissionStatus ?? .denied)
-        }
     }
 
     // MARK: - Private
@@ -198,10 +184,8 @@ final class GazeController {
         checkPermission()
 
         guard permissionStatus == .granted else {
-            let reason: FixedGazeReason = (permissionStatus == .notDetermined)
-                ? .permissionNotDetermined : .permissionDenied
-            os_log(.default, "👁 Gaze: 権限なし: %{public}@ → f03_leftDown", String(describing: permissionStatus))
-            applyGaze(.fixed(.f03_leftDown, reason: reason), frame: .f03_leftDown)
+            os_log(.default, "👁 Gaze: 権限なし → f03_leftDown")
+            applyGaze(.fixed(.f03_leftDown, reason: .permissionNotGranted), frame: .f03_leftDown)
             return
         }
 
@@ -240,17 +224,13 @@ final class GazeController {
 
     private func checkPermission() {
         let trusted = axProvider.isProcessTrusted()
-        let didRequest = UserDefaults.standard.bool(forKey: PermissionKeys.didRequestAccessibility)
-
         let oldStatus = permissionStatus
-        if trusted { permissionStatus = .granted }
-        else if didRequest { permissionStatus = .denied }
-        else { permissionStatus = .notDetermined }
+        permissionStatus = trusted ? .granted : .notGranted
 
         if permissionStatus != oldStatus {
-            os_log(.default, "👁 Gaze: 権限変化: %{public}@ → %{public}@ (trusted=%d, didRequest=%d)",
-                   String(describing: oldStatus), String(describing: permissionStatus),
-                   trusted ? 1 : 0, didRequest ? 1 : 0)
+            os_log(.default, "👁 Gaze: 権限変化: %{public}@ → %{public}@",
+                   String(describing: oldStatus), String(describing: permissionStatus))
+            onPermissionChanged?(permissionStatus)
         }
     }
 
