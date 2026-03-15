@@ -120,12 +120,13 @@ final class CoordinatorBinder {
 
     static func gazeOverride(for phase: MascotPhase) -> GazeOverride {
         switch phase {
-        case .idle:     return .none  // 常にカーソル追跡
-        case .thinking: return .none
-        case .working:  return .none
-        case .done:     return .none  // 常にカーソル追跡
-        case .error:    return .fixed(frame: .f01_center, reason: .mascotStateOverride, allowsAttentionOverride: false)
-        case .sleeping: return .fixed(frame: .f01_center, reason: .mascotStateOverride, allowsAttentionOverride: false)
+        case .idle:       return .none  // 常にカーソル追跡
+        case .thinking:   return .none
+        case .responding: return .none
+        case .working:    return .none
+        case .done:       return .none  // 常にカーソル追跡
+        case .error:      return .fixed(frame: .f01_center, reason: .mascotStateOverride, allowsAttentionOverride: false)
+        case .sleeping:   return .fixed(frame: .f01_center, reason: .mascotStateOverride, allowsAttentionOverride: false)
         }
     }
 
@@ -133,8 +134,8 @@ final class CoordinatorBinder {
 
     static func isBlinkEnabled(for phase: MascotPhase) -> Bool {
         switch phase {
-        case .idle, .thinking, .working, .done: return true
-        case .error, .sleeping:                 return false
+        case .idle, .thinking, .responding, .working, .done: return true
+        case .error, .sleeping:                               return false
         }
     }
 
@@ -147,6 +148,8 @@ final class CoordinatorBinder {
         switch phase {
         case .thinking:
             base = "考えてます..."
+        case .responding:
+            base = "返答中..."
         case .working(let toolName):
             base = "作業中... (\(toolName))"
         case .done(let elapsedMs):

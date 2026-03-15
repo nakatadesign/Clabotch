@@ -49,6 +49,7 @@ final class StateMachine {
 
     private let errorAutoTransitionDelay: TimeInterval
     private let doneAutoTransitionDelay: TimeInterval
+    private let respondingTransitionDelay: TimeInterval
 
     // MARK: - DI seams
 
@@ -58,11 +59,13 @@ final class StateMachine {
         sleepThreshold: TimeInterval = 300,
         errorAutoTransitionDelay: TimeInterval = 2.5,
         doneAutoTransitionDelay: TimeInterval = 4.0,
+        respondingTransitionDelay: TimeInterval = 0.4,
         now: @escaping () -> Date = { Date() }
     ) {
         self.sleepThreshold = sleepThreshold
         self.errorAutoTransitionDelay = errorAutoTransitionDelay
         self.doneAutoTransitionDelay = doneAutoTransitionDelay
+        self.respondingTransitionDelay = respondingTransitionDelay
         self.now = now
     }
 
@@ -126,6 +129,10 @@ final class StateMachine {
             } else {
                 sessions[sessionID]?.phase = .thinking
                 recalculateDisplayPhase()
+                scheduleAutoTransition(
+                    for: sessionID, toPhase: .responding,
+                    after: respondingTransitionDelay
+                )
             }
 
         case .sessionDone(let sessionID, let hookElapsedMs):
@@ -316,6 +323,7 @@ extension MascotPhase {
         switch self {
         case .idle:                return "idle"
         case .thinking:            return "thinking"
+        case .responding:          return "responding"
         case .working(let tool):   return "working(\(tool))"
         case .done(let ms):        return "done(\(ms)ms)"
         case .error(let tool, _):  return "error(\(tool))"

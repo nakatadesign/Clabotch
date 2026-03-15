@@ -7,13 +7,14 @@ import XCTest
 final class MascotPhaseDisplayPriorityTests: XCTestCase {
 
     func testDisplayPriorityOrder() {
-        // error(0) < working(1) < thinking(2) < done(3) < idle(4) < sleeping(5)
+        // error(0) < working(1) < responding(2) < thinking(3) < done(4) < idle(5) < sleeping(6)
         XCTAssertEqual(MascotPhase.error(toolName: "Bash", message: nil).displayPriority, 0)
         XCTAssertEqual(MascotPhase.working(toolName: "Read").displayPriority, 1)
-        XCTAssertEqual(MascotPhase.thinking.displayPriority, 2)
-        XCTAssertEqual(MascotPhase.done(elapsedMs: 100).displayPriority, 3)
-        XCTAssertEqual(MascotPhase.idle.displayPriority, 4)
-        XCTAssertEqual(MascotPhase.sleeping.displayPriority, 5)
+        XCTAssertEqual(MascotPhase.responding.displayPriority, 2)
+        XCTAssertEqual(MascotPhase.thinking.displayPriority, 3)
+        XCTAssertEqual(MascotPhase.done(elapsedMs: 100).displayPriority, 4)
+        XCTAssertEqual(MascotPhase.idle.displayPriority, 5)
+        XCTAssertEqual(MascotPhase.sleeping.displayPriority, 6)
     }
 
     func testErrorHasHighestPriority() {
@@ -28,6 +29,7 @@ final class MascotPhaseDisplayPriorityTests: XCTestCase {
     func testIsDoneHelper() {
         XCTAssertTrue(MascotPhase.done(elapsedMs: 100).isDone)
         XCTAssertFalse(MascotPhase.thinking.isDone)
+        XCTAssertFalse(MascotPhase.responding.isDone)
         XCTAssertFalse(MascotPhase.idle.isDone)
     }
 }
@@ -740,5 +742,137 @@ final class StateMachineElapsedFallbackTests: XCTestCase {
         // Hook が 5000ms（5秒）を報告。startedAt からは 120秒。Hook 値を優先。
         sm.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 5000))
         XCTAssertEqual(sm.displayPhase, .done(elapsedMs: 5000))
+    }
+}
+
+// MARK: - StateMachineRespondingTests（.responding 遷移）
+
+@MainActor
+final class StateMachineRespondingTests: XCTestCase {
+
+    // R-1. tool_end(success) 直後は .thinking
+    func testToolEndSuccessIsThinkingImmediately() {
+        let sm = StateMachine(respondingTransitionDelay: 0.1)
+        sm.handle(event: .sessionStart(sessionID: "s1"))
+        sm.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
+        sm.handle(event: .toolEnd(sessionID: "s1", toolName: "Bash",
+                                   durationMs: 100, isError: false, errorMessage: nil))
+        XCTAssertEqual(sm.displayPhase, .thinking)
+        XCTAssertEqual(sm.sessions["s1"]?.phase, .thinking)
+    }
+
+    // R-2. 遅延経過後に .responding に遷移
+    func testRespondingTransitionAfterDelay() {
+        let sm = StateMachine(respondingTransitionDelay: 0.05)
+        sm.handle(event: .sessionStart(sessionID: "s1"))
+        sm.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
+        sm.handle(event: .toolEnd(sessionID: "s1", toolName: "Bash",
+                                   durationMs: 100, isError: false, errorMessage: nil))
+
+        let exp = expectation(description: "responding transition")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(sm.displayPhase, .responding)
+            XCTAssertEqual(sm.sessions["s1"]?.phase, .responding)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1)
+    }
+
+    // R-3. 遅延経過前に tool_start が来たら .working → .responding にならない
+    func testToolStartCancelsRespondingTransition() {
+        let sm = StateMachine(respondingTransitionDelay: 0.1)
+        sm.handle(event: .sessionStart(sessionID: "s1"))
+        sm.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
+        sm.handle(event: .toolEnd(sessionID: "s1", toolName: "Bash",
+                                   durationMs: 100, isError: false, errorMessage: nil))
+
+        // 遅延前に tool_start
+        sm.handle(event: .toolStart(sessionID: "s1", toolName: "Read"))
+        XCTAssertEqual(sm.displayPhase, .working(toolName: "Read"))
+
+        let exp = expectation(description: "responding not fired")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            XCTAssertEqual(sm.displayPhase, .working(toolName: "Read"))
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1)
+    }
+
+    // R-4. 遅延経過前に session_done が来たら .done が優先
+    func testSessionDoneCancelsRespondingTransition() {
+        let sm = StateMachine(doneAutoTransitionDelay: 10, respondingTransitionDelay: 0.1)
+        sm.handle(event: .sessionStart(sessionID: "s1"))
+        sm.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
+        sm.handle(event: .toolEnd(sessionID: "s1", toolName: "Bash",
+                                   durationMs: 100, isError: false, errorMessage: nil))
+
+        sm.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 5000))
+        XCTAssertEqual(sm.displayPhase, .done(elapsedMs: 5000))
+
+        let exp = expectation(description: "responding not fired after done")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            XCTAssertEqual(sm.displayPhase, .done(elapsedMs: 5000))
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1)
+    }
+
+    // R-5. 複数セッションで displayPriority が正しく解決される
+    func testRespondingDisplayPriorityWithMultipleSessions() {
+        let sm = StateMachine(respondingTransitionDelay: 0.05)
+        sm.handle(event: .sessionStart(sessionID: "a"))
+        sm.handle(event: .sessionStart(sessionID: "b"))
+        // a を responding にする
+        sm.handle(event: .toolStart(sessionID: "a", toolName: "Bash"))
+        sm.handle(event: .toolEnd(sessionID: "a", toolName: "Bash",
+                                   durationMs: 100, isError: false, errorMessage: nil))
+
+        let exp = expectation(description: "a becomes responding")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(sm.sessions["a"]?.phase, .responding)
+            // a=responding(2), b=thinking(3) → displayPhase = responding
+            XCTAssertEqual(sm.displayPhase, .responding)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1)
+    }
+
+    // R-6. .responding のセッションに tool_start が来たら .working に戻る
+    func testToolStartFromRespondingGoesToWorking() {
+        let sm = StateMachine(respondingTransitionDelay: 0.05)
+        sm.handle(event: .sessionStart(sessionID: "s1"))
+        sm.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
+        sm.handle(event: .toolEnd(sessionID: "s1", toolName: "Bash",
+                                   durationMs: 100, isError: false, errorMessage: nil))
+
+        let exp = expectation(description: "responding then working")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(sm.displayPhase, .responding)
+            sm.handle(event: .toolStart(sessionID: "s1", toolName: "Read"))
+            XCTAssertEqual(sm.displayPhase, .working(toolName: "Read"))
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1)
+    }
+
+    // R-7. tool_end(error) では .responding 遷移がスケジュールされない
+    func testToolEndErrorDoesNotScheduleResponding() {
+        let sm = StateMachine(errorAutoTransitionDelay: 0.1, respondingTransitionDelay: 0.05)
+        sm.handle(event: .sessionStart(sessionID: "s1"))
+        sm.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
+        sm.handle(event: .toolEnd(sessionID: "s1", toolName: "Bash",
+                                   durationMs: 100, isError: true, errorMessage: "失敗"))
+
+        // 即時は error
+        XCTAssertEqual(sm.displayPhase, .error(toolName: "Bash", message: "失敗"))
+
+        // 0.05秒後: responding にはならない（error auto-transition は 0.1秒後なのでまだ error）
+        let exp = expectation(description: "no responding after error")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.07) {
+            // error のまま（responding にならない）
+            XCTAssertEqual(sm.displayPhase, .error(toolName: "Bash", message: "失敗"))
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1)
     }
 }

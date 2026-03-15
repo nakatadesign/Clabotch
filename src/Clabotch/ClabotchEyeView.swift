@@ -221,6 +221,14 @@ final class ClabotchEyeView: NSView {
             showHappyEyes = false
             cancelBlink()
             startThinkingAnimation()
+        case .responding:
+            faceColor = Palette.faceNormal
+            showErrorX = false
+            showSurprise = false
+            showSleepingEyes = false
+            showHappyEyes = false
+            gazeFrame = .f01_center
+            cancelBlink()
         case .working:
             faceColor = Palette.faceDone  // 暖かいゴールド
             showErrorX = false

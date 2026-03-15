@@ -49,6 +49,11 @@ final class AppDelegateCoordinatorTests: XCTestCase {
         XCTAssertEqual(override, .fixed(frame: .f01_center, reason: .mascotStateOverride))
     }
 
+    func testGazeOverrideForRespondingNone() {
+        let override = CoordinatorBinder.gazeOverride(for: .responding)
+        XCTAssertEqual(override, .none)
+    }
+
     func testGazeOverrideForSleepingFixed() {
         let override = CoordinatorBinder.gazeOverride(for: .sleeping)
         XCTAssertEqual(override, .fixed(frame: .f01_center, reason: .mascotStateOverride))
@@ -60,6 +65,7 @@ final class AppDelegateCoordinatorTests: XCTestCase {
         // 通常 phase → true
         XCTAssertTrue(CoordinatorBinder.isBlinkEnabled(for: .idle))
         XCTAssertTrue(CoordinatorBinder.isBlinkEnabled(for: .thinking))
+        XCTAssertTrue(CoordinatorBinder.isBlinkEnabled(for: .responding))
         XCTAssertTrue(CoordinatorBinder.isBlinkEnabled(for: .working(toolName: "bash")))
         XCTAssertTrue(CoordinatorBinder.isBlinkEnabled(for: .done(elapsedMs: 1000)))
 
@@ -92,6 +98,11 @@ final class AppDelegateCoordinatorTests: XCTestCase {
         XCTAssertEqual(binder.bubbleText(for: .error(toolName: "Bash", message: nil)), "エラーが出ました…")
     }
 
+    func testBubbleTextResponding() {
+        let binder = makeBinderWithNoSessions()
+        XCTAssertEqual(binder.bubbleText(for: .responding), "返答中...")
+    }
+
     func testBubbleTextWorking() {
         let binder = makeBinderWithNoSessions()
         XCTAssertEqual(binder.bubbleText(for: .working(toolName: "Bash")), "作業中... (Bash)")
@@ -108,6 +119,7 @@ final class AppDelegateCoordinatorTests: XCTestCase {
     func testDebugNameIncludesAssociatedValues() {
         XCTAssertEqual(MascotPhase.idle.debugName, "idle")
         XCTAssertEqual(MascotPhase.thinking.debugName, "thinking")
+        XCTAssertEqual(MascotPhase.responding.debugName, "responding")
         XCTAssertEqual(MascotPhase.working(toolName: "Bash").debugName, "working(Bash)")
         XCTAssertEqual(MascotPhase.done(elapsedMs: 99999).debugName, "done(99999ms)")
         XCTAssertEqual(MascotPhase.error(toolName: "Read", message: "err").debugName, "error(Read)")

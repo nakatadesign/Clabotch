@@ -502,7 +502,7 @@ final class ClabotchEyeViewTests: XCTestCase {
 
     func testNonThinkingPhasesDoNotHaveThinkingAnim() {
         let phases: [MascotPhase] = [
-            .idle, .working(toolName: "Bash"),
+            .idle, .responding, .working(toolName: "Bash"),
             .done(elapsedMs: 1000), .error(toolName: "Bash", message: nil), .sleeping
         ]
         for phase in phases {
@@ -521,6 +521,33 @@ final class ClabotchEyeViewTests: XCTestCase {
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.5)
+    }
+
+    // MARK: - hitTest 透過
+
+    // MARK: - RESPONDING フェーズ
+
+    func testRespondingStopsThinkingAnimation() {
+        sut.setPhaseAppearance(phase: .thinking)
+        XCTAssertNotNil(sut.thinkingAnimFrame)
+
+        sut.setPhaseAppearance(phase: .responding)
+        XCTAssertNil(sut.thinkingAnimFrame, "responding では thinking アニメーションが停止するべき")
+    }
+
+    func testRespondingSetsGazeToCenterAndNormalFace() {
+        sut.setPhaseAppearance(phase: .responding)
+        XCTAssertEqual(sut.gazeFrame, .f01_center)
+        XCTAssertEqual(sut.faceColor, ClabotchEyeView.Palette.faceNormal)
+        XCTAssertFalse(sut.showErrorX)
+        XCTAssertFalse(sut.showSurprise)
+        XCTAssertFalse(sut.showSleepingEyes)
+        XCTAssertFalse(sut.showHappyEyes)
+    }
+
+    func testDrawDuringRespondingDoesNotCrash() {
+        sut.setPhaseAppearance(phase: .responding)
+        sut.display()
     }
 
     // MARK: - hitTest 透過
