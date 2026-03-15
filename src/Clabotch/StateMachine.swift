@@ -59,7 +59,7 @@ final class StateMachine {
         sleepThreshold: TimeInterval = 300,
         errorAutoTransitionDelay: TimeInterval = 2.5,
         doneAutoTransitionDelay: TimeInterval = 4.0,
-        respondingTransitionDelay: TimeInterval = 0.4,
+        respondingTransitionDelay: TimeInterval = 0.8,
         now: @escaping () -> Date = { Date() }
     ) {
         self.sleepThreshold = sleepThreshold
