@@ -49,8 +49,9 @@ final class ClabotchEyeView: NSView {
         .f03_leftDown,
     ]
 
-    /// RESPONDING アニメーション各ステップの間隔（thinking より遅く、静かな印象）
-    static let respondingAnimInterval: TimeInterval = 2.0
+    /// RESPONDING アニメーション各ステップの間隔（thinking より遅く、静かな印象）。
+    /// テストや実機チューニングのために変更可能。
+    var respondingAnimInterval: TimeInterval = 2.0
 
     /// DONE アニメーション: 左下から時計回り2周 → 左下で停止
     static let doneAnimSequence: [GazeFrame] = [
@@ -477,7 +478,7 @@ final class ClabotchEyeView: NSView {
         respondingAnimFrame = Self.respondingAnimSequence[0]
 
         respondingTimer = Timer.scheduledTimer(
-            withTimeInterval: Self.respondingAnimInterval,
+            withTimeInterval: respondingAnimInterval,
             repeats: true
         ) { [weak self] timer in
             guard let self else { timer.invalidate(); return }

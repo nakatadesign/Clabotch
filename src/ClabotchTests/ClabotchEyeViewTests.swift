@@ -542,16 +542,19 @@ final class ClabotchEyeViewTests: XCTestCase {
     }
 
     func testRespondingAnimationAlternatesGaze() {
+        sut.respondingAnimInterval = 0.15
         sut.setPhaseAppearance(phase: .responding)
         XCTAssertEqual(sut.respondingAnimFrame, .f01_center, "初期は中央")
 
+        // Timer 発火を RunLoop で待機
         let exp = expectation(description: "responding 視線が左下に遷移")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.1) {
-            XCTAssertEqual(self.sut.respondingAnimFrame, .f03_leftDown,
-                           "1ステップ後は左下であるべき")
-            exp.fulfill()
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
+            if self.sut.respondingAnimFrame == .f03_leftDown {
+                exp.fulfill()
+            }
         }
-        wait(for: [exp], timeout: 3.0)
+        wait(for: [exp], timeout: 1.0)
+        timer.invalidate()
     }
 
     func testRespondingAnimationStopsOnPhaseChange() {
@@ -579,7 +582,7 @@ final class ClabotchEyeViewTests: XCTestCase {
     }
 
     func testRespondingIntervalIsSlowerThanThinking() {
-        XCTAssertGreaterThan(ClabotchEyeView.respondingAnimInterval,
+        XCTAssertGreaterThan(sut.respondingAnimInterval,
                              ClabotchEyeView.thinkingAnimInterval,
                              "responding は thinking より遅いべき")
     }
