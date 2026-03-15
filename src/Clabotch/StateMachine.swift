@@ -270,6 +270,17 @@ final class StateMachine {
         sleepTimer = nil
     }
 
+    // MARK: - スリープ復帰
+
+    /// ターミナルクリック等の外部トリガーで sleeping → idle に復帰する。
+    /// セッションが残っていない場合のみ有効。スリープタイマーを再スケジュールする。
+    func wakeFromSleep() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        guard case .sleeping = displayPhase else { return }
+        updateDisplayPhase(to: .idle)
+        startSleepTimerIfNeeded()
+    }
+
     // MARK: - 設定変更
 
     /// スリープタイムアウトを動的に変更する。

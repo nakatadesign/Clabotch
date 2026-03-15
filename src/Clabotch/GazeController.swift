@@ -25,6 +25,9 @@ final class GazeController {
     /// AX 権限状態が変化したときに呼ばれる。
     var onPermissionChanged: ((GazePermissionStatus) -> Void)?
 
+    /// ターミナルウィンドウがクリックされたときに呼ばれる。
+    var onTerminalClicked: (() -> Void)?
+
     // MARK: - 外部依存の注入
 
     /// メニューバーアイコンの中心座標を返す。AppDelegate が設定する。
@@ -179,6 +182,7 @@ final class GazeController {
         }
         os_log(.info, "[Gaze] attention 開始: %{public}@", bundle)
         attentionExpiry = now().addingTimeInterval(attentionDuration)
+        onTerminalClicked?()
         update()
     }
 

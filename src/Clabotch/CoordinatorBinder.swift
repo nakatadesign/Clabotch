@@ -97,6 +97,11 @@ final class CoordinatorBinder {
             }
         }
 
+        // ターミナルクリックで sleeping から復帰
+        gazeController.onTerminalClicked = { [weak self] in
+            self?.stateMachine.wakeFromSleep()
+        }
+
         stateMachine.onEphemeralDone = { [weak self] elapsedMs in
             guard let self else { return }
             let text = Self.formatElapsedTime(elapsedMs)
