@@ -855,39 +855,22 @@ final class StateMachineRespondingTests: XCTestCase {
         wait(for: [exp], timeout: 1)
     }
 
-    // R-7. session_start 後も遅延経過で .responding に遷移する
-    func testSessionStartSchedulesRespondingTransition() {
+    // R-7. session_start 後は .thinking のまま（.responding にはならない）
+    func testSessionStartStaysThinking() {
         let sm = StateMachine(respondingTransitionDelay: 0.05)
         sm.handle(event: .sessionStart(sessionID: "s1"))
         XCTAssertEqual(sm.displayPhase, .thinking)
 
-        let exp = expectation(description: "responding after session_start")
+        let exp = expectation(description: "stays thinking after session_start")
+        exp.isInverted = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertEqual(sm.displayPhase, .responding)
-            exp.fulfill()
+            if sm.displayPhase == .responding { exp.fulfill() }
         }
-        wait(for: [exp], timeout: 1)
-    }
-
-    // R-8. session_start 後の .responding 遷移は tool_start でキャンセルされる
-    func testSessionStartRespondingCancelledByToolStart() {
-        let sm = StateMachine(respondingTransitionDelay: 0.1)
-        sm.handle(event: .sessionStart(sessionID: "s1"))
+        wait(for: [exp], timeout: 0.2)
         XCTAssertEqual(sm.displayPhase, .thinking)
-
-        // 遅延前に tool_start
-        sm.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
-        XCTAssertEqual(sm.displayPhase, .working(toolName: "Bash"))
-
-        let exp = expectation(description: "responding not fired after tool_start")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            XCTAssertEqual(sm.displayPhase, .working(toolName: "Bash"))
-            exp.fulfill()
-        }
-        wait(for: [exp], timeout: 1)
     }
 
-    // R-9. tool_end(error) では .responding 遷移がスケジュールされない
+    // R-8. tool_end(error) では .responding 遷移がスケジュールされない
     func testToolEndErrorDoesNotScheduleResponding() {
         let sm = StateMachine(errorAutoTransitionDelay: 0.1, respondingTransitionDelay: 0.05)
         sm.handle(event: .sessionStart(sessionID: "s1"))

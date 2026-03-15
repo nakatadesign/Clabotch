@@ -106,10 +106,6 @@ final class StateMachine {
             )
             sessionEpochs[sessionID] = 0
             recalculateDisplayPhase()
-            scheduleAutoTransition(
-                for: sessionID, toPhase: .responding,
-                after: respondingTransitionDelay
-            )
 
         case .toolStart(let sessionID, let toolName):
             guard let s = sessions[sessionID], !s.phase.isDone else { return }
