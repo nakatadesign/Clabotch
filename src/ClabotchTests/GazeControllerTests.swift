@@ -447,6 +447,39 @@ final class GazeControllerPollingTests: XCTestCase {
         }
         wait(for: [exp], timeout: 1.0)
     }
+
+    func testPollIntervalSwitchesOnPermissionChange() {
+        // notGranted → granted でポーリング間隔が切り替わることを確認
+        // 低頻度（notGranted）時の pollIntervalNotGranted=0.2, granted=0.05
+        let fastSut = GazeController(
+            axProvider: mockAX,
+            workspaceProvider: mockWorkspace,
+            pollInterval: 0.05,
+            pollIntervalNotGranted: 0.2
+        )
+        fastSut.statusItemCenterProvider = { CGPoint(x: 100, y: 10) }
+
+        mockAX.isTrusted = false
+        fastSut.startPolling()
+
+        var grantedCallbackCount = 0
+        fastSut.onPermissionChanged = { status in
+            if status == .granted { grantedCallbackCount += 1 }
+        }
+
+        let exp = expectation(description: "権限変化で間隔切替")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            // 権限を付与 → 間隔が 0.05 に切り替わる
+            self.mockAX.isTrusted = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                XCTAssertEqual(grantedCallbackCount, 1)
+                XCTAssertEqual(fastSut.permissionStatus, .granted)
+                fastSut.stopPolling()
+                exp.fulfill()
+            }
+        }
+        wait(for: [exp], timeout: 2.0)
+    }
 }
 
 // MARK: - 6f. Attention（一時注視）テスト

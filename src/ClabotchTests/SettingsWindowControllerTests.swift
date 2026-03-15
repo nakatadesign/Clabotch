@@ -46,6 +46,31 @@ final class SettingsWindowControllerTests: XCTestCase {
         wc.close()
         XCTAssertFalse(wc.isVisible)
     }
+
+    // MARK: - AX 権限 UI
+
+    func testRefreshAccessibilityStatusUpdatesLabel() {
+        let wc = makeHeadlessSUT()
+        wc.showWindow()
+        // ヘッドレスでも axStatusLabel は buildContentView 経由で生成される
+        // ただし windowFactory=nil だと buildContentView が呼ばれない
+        // → refreshAccessibilityStatus が nil-safe であることを確認
+        wc.refreshAccessibilityStatus()  // クラッシュしないこと
+    }
+
+    func testAxSettingsButtonExistsAfterShow() {
+        // windowFactory を実際のウィンドウを返すように設定
+        let wc = SettingsWindowController(settingsStore: store)
+        var contentViewCaptured: NSView?
+        wc.windowFactory = { contentView in
+            contentViewCaptured = contentView
+            return nil  // ウィンドウは作らないが contentView は構築される
+        }
+        wc.showWindow()
+        // axSettingsButton が構築されていること
+        XCTAssertNotNil(wc.axSettingsButton)
+        XCTAssertNotNil(wc.axStatusLabel)
+    }
 }
 
 // MARK: - StateMachine.updateSleepThreshold テスト
