@@ -34,12 +34,12 @@ else
 fi
 
 # ③ session_start（必要時）+ session_done を1接続で送信
-PAYLOAD=""
-if [[ "$NEEDS_SESSION_START" == "true" ]]; then
-  PAYLOAD=$(printf '{"schema_version":"1","event":"session_start","session_id":"%s","event_id":"%s","timestamp":"%s"}\n' \
-    "$SESSION_ID" "$(generate_uuid)" "$NOW")
-fi
-PAYLOAD="${PAYLOAD}$(printf '{"schema_version":"1","event":"session_done","session_id":"%s","event_id":"%s","timestamp":"%s","elapsed_ms":%d}\n' \
-  "$SESSION_ID" "$(generate_uuid)" "$NOW" "$ELAPSED_MS")"
-
-printf '%s' "$PAYLOAD" | send_json || true
+# 注意: $() は末尾改行を除去するため使わない。直接パイプで printf → send_json。
+{
+  if [[ "$NEEDS_SESSION_START" == "true" ]]; then
+    printf '{"schema_version":"1","event":"session_start","session_id":"%s","event_id":"%s","timestamp":"%s"}\n' \
+      "$SESSION_ID" "$(generate_uuid)" "$NOW"
+  fi
+  printf '{"schema_version":"1","event":"session_done","session_id":"%s","event_id":"%s","timestamp":"%s","elapsed_ms":%d}\n' \
+    "$SESSION_ID" "$(generate_uuid)" "$NOW" "$ELAPSED_MS"
+} | send_json || true
