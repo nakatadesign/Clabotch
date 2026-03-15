@@ -93,6 +93,7 @@ final class ClabotchEyeView: NSView {
     private(set) var faceColor: NSColor = Palette.faceNormal
     private(set) var showErrorX: Bool = false
     private(set) var showSurprise: Bool = false
+    private(set) var showSleepingEyes: Bool = false
     private var blinkTimer: Timer?
 
     /// 後方互換: まばたき中（open 以外）かどうか
@@ -194,22 +195,26 @@ final class ClabotchEyeView: NSView {
             faceColor = Palette.faceNormal
             showErrorX = false
             showSurprise = false
+            showSleepingEyes = false
             cancelBlink()
         case .thinking:
             faceColor = Palette.faceNormal
             showErrorX = false
             showSurprise = false
+            showSleepingEyes = false
             cancelBlink()
             startThinkingAnimation()
         case .working:
             faceColor = Palette.faceDone  // 暖かいゴールド
             showErrorX = false
             showSurprise = false
+            showSleepingEyes = false
             cancelBlink()
         case .done:
             faceColor = Palette.faceDone
             showErrorX = false
             showSurprise = true
+            showSleepingEyes = false
             cancelBlink()
             startDoneAnimation()
             startRainbowAnimation()
@@ -217,15 +222,17 @@ final class ClabotchEyeView: NSView {
             faceColor = Palette.faceError
             showErrorX = true
             showSurprise = false
+            showSleepingEyes = false
             cancelBlink()
             startErrorShakeAnimation()
         case .sleeping:
             faceColor = Palette.faceSleep
             showErrorX = false
             showSurprise = false
+            showSleepingEyes = true
             blinkTimer?.invalidate()
             blinkTimer = nil
-            blinkStage = .closed
+            blinkStage = .open
         }
         os_log(.default, "🎨 EyeView: phase=%{public}@ faceColor=%{public}@ errorX=%d surprise=%d blinkStage=%{public}@",
                phase.debugName, Self.colorHex(faceColor),
@@ -484,7 +491,11 @@ final class ClabotchEyeView: NSView {
             // 半閉じ: ソケット 4×4、瞳 2×2（patch_012）
             drawBlinkHalf(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
         case .open:
-            if showErrorX {
+            if showSleepingEyes {
+                // スリープ: ^_^ 閉じ目
+                drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
+                drawSleepingEyes(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
+            } else if showErrorX {
                 // エラー: ×マーク（frame07 / frame10 / frame11）
                 drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
                 drawErrorX(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
@@ -605,6 +616,19 @@ final class ClabotchEyeView: NSView {
         ctx.setFillColor(Palette.pupil.cgColor)
         px(ctx, 2, 7, 5, 1, dot, ox: ox, oy: oy, dy: dy)
         px(ctx, 13, 7, 5, 1, dot, ox: ox, oy: oy, dy: dy)
+    }
+
+    /// スリープ閉じ目: ^_^ 逆V字
+    private func drawSleepingEyes(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {
+        ctx.setFillColor(Palette.pupil.cgColor)
+        // 左目: (2,7) と (6,7) の2dot + (3,8)-(5,8) の3dot
+        px(ctx, 2, 7, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 6, 7, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 3, 8, 3, 1, dot, ox: ox, oy: oy, dy: dy)
+        // 右目: (13,7) と (17,7) の2dot + (14,8)-(16,8) の3dot
+        px(ctx, 13, 7, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 17, 7, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 14, 8, 3, 1, dot, ox: ox, oy: oy, dy: dy)
     }
 
     private func drawBlinkClosed(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {
