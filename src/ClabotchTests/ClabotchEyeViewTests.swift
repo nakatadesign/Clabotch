@@ -464,17 +464,19 @@ final class ClabotchEyeViewTests: XCTestCase {
     }
 
     func testThinkingAnimationAlternatesGaze() {
+        sut.thinkingAnimInterval = 0.15
         sut.setPhaseAppearance(phase: .thinking)
         XCTAssertEqual(sut.thinkingAnimFrame, .f05_rightUp, "初期は右上")
 
+        // Timer 発火を RunLoop で待機
         let exp = expectation(description: "thinking 視線が左上に遷移")
-        // 0.8s 後に左上に遷移
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
-            XCTAssertEqual(self.sut.thinkingAnimFrame, .f04_leftUp,
-                           "1ステップ後は左上であるべき")
-            exp.fulfill()
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
+            if self.sut.thinkingAnimFrame == .f04_leftUp {
+                exp.fulfill()
+            }
         }
-        wait(for: [exp], timeout: 1.5)
+        wait(for: [exp], timeout: 1.0)
+        timer.invalidate()
     }
 
     func testThinkingAnimationNoVerticalBob() {
@@ -513,14 +515,15 @@ final class ClabotchEyeViewTests: XCTestCase {
     }
 
     func testDrawDuringThinkingAnimDoesNotCrash() {
+        sut.thinkingAnimInterval = 0.1
         sut.setPhaseAppearance(phase: .thinking)
         sut.display()
         let exp = expectation(description: "thinking アニメ中の描画")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             self.sut.display()
             exp.fulfill()
         }
-        wait(for: [exp], timeout: 1.5)
+        wait(for: [exp], timeout: 1.0)
     }
 
     // MARK: - hitTest 透過
@@ -583,7 +586,7 @@ final class ClabotchEyeViewTests: XCTestCase {
 
     func testRespondingIntervalIsSlowerThanThinking() {
         XCTAssertGreaterThan(sut.respondingAnimInterval,
-                             ClabotchEyeView.thinkingAnimInterval,
+                             sut.thinkingAnimInterval,
                              "responding は thinking より遅いべき")
     }
 

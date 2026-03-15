@@ -40,8 +40,9 @@ final class ClabotchEyeView: NSView {
         (.f04_leftUp,  0),
     ]
 
-    /// THINKING アニメーション各ステップの間隔
-    static let thinkingAnimInterval: TimeInterval = 0.8
+    /// THINKING アニメーション各ステップの間隔。
+    /// テストや実機チューニングのために変更可能。
+    var thinkingAnimInterval: TimeInterval = 0.8
 
     /// RESPONDING アニメーション: 中央⇔左下をゆっくり交互（「書いている」感）
     static let respondingAnimSequence: [GazeFrame] = [
@@ -450,7 +451,7 @@ final class ClabotchEyeView: NSView {
         shakeYOffset = first.yOffset
 
         thinkingTimer = Timer.scheduledTimer(
-            withTimeInterval: Self.thinkingAnimInterval,
+            withTimeInterval: thinkingAnimInterval,
             repeats: true
         ) { [weak self] timer in
             guard let self else { timer.invalidate(); return }
