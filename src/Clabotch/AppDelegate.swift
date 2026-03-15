@@ -205,11 +205,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func applyAnimationSpeed() {
         guard let eyeView else { return }
         let m = settingsStore.animationSpeedMultiplier
-        eyeView.thinkingAnimInterval = 0.8 * m
-        eyeView.respondingAnimInterval = 2.0 * m
-        eyeView.doneAnimInterval = 0.12 * m
-        eyeView.jumpInterval = 0.08 * m
-        eyeView.errorShakeInterval = 0.08 * m
+        eyeView.thinkingAnimInterval = ClabotchEyeView.defaultThinkingAnimInterval * m
+        eyeView.respondingAnimInterval = ClabotchEyeView.defaultRespondingAnimInterval * m
+        eyeView.doneAnimInterval = ClabotchEyeView.defaultDoneAnimInterval * m
+        eyeView.jumpInterval = ClabotchEyeView.defaultJumpInterval * m
+        eyeView.errorShakeInterval = ClabotchEyeView.defaultErrorShakeInterval * m
 
         // 現在 phase が .thinking / .responding なら即時再適用
         // .done / .error は再発火（jump/rainbow/shake）の副作用があるため即時再適用しない

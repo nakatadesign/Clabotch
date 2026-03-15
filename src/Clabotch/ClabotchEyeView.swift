@@ -42,7 +42,8 @@ final class ClabotchEyeView: NSView {
 
     /// THINKING アニメーション各ステップの間隔。
     /// テストや実機チューニングのために変更可能。
-    var thinkingAnimInterval: TimeInterval = 0.8
+    static let defaultThinkingAnimInterval: TimeInterval = 0.8
+    var thinkingAnimInterval: TimeInterval = defaultThinkingAnimInterval
 
     /// RESPONDING アニメーション: 中央⇔左下をゆっくり交互（「書いている」感）
     static let respondingAnimSequence: [GazeFrame] = [
@@ -52,7 +53,8 @@ final class ClabotchEyeView: NSView {
 
     /// RESPONDING アニメーション各ステップの間隔（thinking より遅く、静かな印象）。
     /// テストや実機チューニングのために変更可能。
-    var respondingAnimInterval: TimeInterval = 2.0
+    static let defaultRespondingAnimInterval: TimeInterval = 2.0
+    var respondingAnimInterval: TimeInterval = defaultRespondingAnimInterval
 
     /// DONE アニメーション: 左下から時計回り2周 → 左下で停止
     static let doneAnimSequence: [GazeFrame] = [
@@ -86,18 +88,21 @@ final class ClabotchEyeView: NSView {
 
     /// DONE アニメーション各ステップの間隔。
     /// テストや実機チューニングのために変更可能。
-    var doneAnimInterval: TimeInterval = 0.12
+    static let defaultDoneAnimInterval: TimeInterval = 0.12
+    var doneAnimInterval: TimeInterval = defaultDoneAnimInterval
 
     /// ERROR アニメーション各ステップの間隔。
     /// テストや実機チューニングのために変更可能。
-    var errorShakeInterval: TimeInterval = 0.08
+    static let defaultErrorShakeInterval: TimeInterval = 0.08
+    var errorShakeInterval: TimeInterval = defaultErrorShakeInterval
 
     /// ジャンプアニメーション: Y オフセット（ポイント）のシーケンス（§5 定義）
     static let jumpSequence: [CGFloat] = [6, 12, 4, 0, 4, 8, 2, 0]
 
     /// ジャンプアニメーション各ステップの間隔。
     /// テストや実機チューニングのために変更可能。
-    var jumpInterval: TimeInterval = 0.08
+    static let defaultJumpInterval: TimeInterval = 0.08
+    var jumpInterval: TimeInterval = defaultJumpInterval
 
     // MARK: - 状態（private(set) でテストから参照可能）
 
