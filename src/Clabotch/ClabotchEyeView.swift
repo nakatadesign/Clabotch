@@ -94,6 +94,7 @@ final class ClabotchEyeView: NSView {
     private(set) var showErrorX: Bool = false
     private(set) var showSurprise: Bool = false
     private(set) var showSleepingEyes: Bool = false
+    private(set) var showHappyEyes: Bool = false
     private var blinkTimer: Timer?
 
     /// 後方互換: まばたき中（open 以外）かどうか
@@ -196,12 +197,14 @@ final class ClabotchEyeView: NSView {
             showErrorX = false
             showSurprise = false
             showSleepingEyes = false
+            showHappyEyes = false
             cancelBlink()
         case .thinking:
             faceColor = Palette.faceNormal
             showErrorX = false
             showSurprise = false
             showSleepingEyes = false
+            showHappyEyes = false
             cancelBlink()
             startThinkingAnimation()
         case .working:
@@ -209,12 +212,14 @@ final class ClabotchEyeView: NSView {
             showErrorX = false
             showSurprise = false
             showSleepingEyes = false
+            showHappyEyes = false
             cancelBlink()
         case .done:
             faceColor = Palette.faceDone
             showErrorX = false
             showSurprise = true
             showSleepingEyes = false
+            showHappyEyes = false
             cancelBlink()
             startDoneAnimation()
             startRainbowAnimation()
@@ -223,6 +228,7 @@ final class ClabotchEyeView: NSView {
             showErrorX = true
             showSurprise = false
             showSleepingEyes = false
+            showHappyEyes = false
             cancelBlink()
             startErrorShakeAnimation()
         case .sleeping:
@@ -295,11 +301,11 @@ final class ClabotchEyeView: NSView {
                 self.doneAnimPupilFrame = Self.doneAnimSequence[self.animationStep]
                 self.needsDisplay = true
             } else {
-                // アニメーション完了 — ハッピー目（^_^）に切替
+                // アニメーション完了 — ハッピー目（⌒）に切替
                 timer.invalidate()
                 self.animationTimer = nil
                 self.showSurprise = false
-                self.showSleepingEyes = true  // ^_^ 描画を流用
+                self.showHappyEyes = true
                 self.doneAnimPupilFrame = nil
                 self.needsDisplay = true
             }
@@ -384,6 +390,7 @@ final class ClabotchEyeView: NSView {
         animationTimer = nil
         animationStep = 0
         doneAnimPupilFrame = nil
+        showHappyEyes = false
         shakeYOffset = 0
         stopThinkingAnimation()
         stopJump()
@@ -495,7 +502,11 @@ final class ClabotchEyeView: NSView {
             // 半閉じ: ソケット 4×4、瞳 2×2（patch_012）
             drawBlinkHalf(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
         case .open:
-            if showSleepingEyes {
+            if showHappyEyes {
+                // ハッピー: ⌒ 上向きアーチ（done 完了後）
+                drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
+                drawHappyEyes(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
+            } else if showSleepingEyes {
                 // スリープ: ^_^ 閉じ目
                 drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
                 drawSleepingEyes(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
@@ -620,6 +631,19 @@ final class ClabotchEyeView: NSView {
         ctx.setFillColor(Palette.pupil.cgColor)
         px(ctx, 2, 7, 5, 1, dot, ox: ox, oy: oy, dy: dy)
         px(ctx, 13, 7, 5, 1, dot, ox: ox, oy: oy, dy: dy)
+    }
+
+    /// ハッピー目: ⌒ 上向きアーチ（done 完了後）
+    private func drawHappyEyes(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {
+        ctx.setFillColor(Palette.pupil.cgColor)
+        // 左目: (3,6)-(5,6) の3dot + (2,7) と (6,7) の2dot
+        px(ctx, 3, 6, 3, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 2, 7, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 6, 7, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        // 右目: (14,6)-(16,6) の3dot + (13,7) と (17,7) の2dot
+        px(ctx, 14, 6, 3, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 13, 7, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 17, 7, 1, 1, dot, ox: ox, oy: oy, dy: dy)
     }
 
     /// スリープ閉じ目: ^_^ 逆V字
