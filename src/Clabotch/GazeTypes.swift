@@ -1,12 +1,14 @@
 import Foundation
 
-/// 視線フレーム。5方向。描画層が frame 番号に変換する。
+/// 視線フレーム。7方向。描画層が frame 番号に変換する。
 enum GazeFrame: Equatable, CaseIterable {
     case f01_center       // 正面（error, sleeping, ターミナル未検出）
     case f02_rightDown    // 右下（idle, done, 権限未許可）
     case f03_leftDown     // 左下
     case f04_leftUp       // 左上
     case f05_rightUp      // 右上
+    case f06_right        // 右（水平）
+    case f07_left         // 左（水平）
 }
 
 /// AX 権限の状態。

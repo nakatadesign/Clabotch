@@ -44,8 +44,8 @@ final class GazeControllerOverrideTests: XCTestCase {
         let exp = expectation(description: "poll が発火して再計算される")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             // override が none なので update() が走り、permission に基づく値になる
-            XCTAssertEqual(self.sut.gazeFrame, .f02_rightDown)
-            XCTAssertEqual(self.sut.mode, .fixed(.f02_rightDown, reason: .permissionNotDetermined))
+            XCTAssertEqual(self.sut.gazeFrame, .f03_leftDown)
+            XCTAssertEqual(self.sut.mode, .fixed(.f03_leftDown, reason: .permissionNotDetermined))
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)
@@ -77,7 +77,7 @@ final class GazeControllerOverrideTests: XCTestCase {
             receivedFrames.append(frame)
         }
 
-        // 初期値は f02_rightDown。f01_center に変更 → コールバック発火
+        // 初期値は f03_leftDown。f01_center に変更 → コールバック発火
         sut.setOverride(.fixed(frame: .f01_center, reason: .mascotStateOverride))
         XCTAssertEqual(receivedFrames, [.f01_center])
 
@@ -162,8 +162,8 @@ final class GazeControllerPermissionTests: XCTestCase {
         sut.startPolling()
         let exp = expectation(description: "poll 発火")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertEqual(self.sut.mode, .fixed(.f02_rightDown, reason: .permissionDenied))
-            XCTAssertEqual(self.sut.gazeFrame, .f02_rightDown)
+            XCTAssertEqual(self.sut.mode, .fixed(.f03_leftDown, reason: .permissionDenied))
+            XCTAssertEqual(self.sut.gazeFrame, .f03_leftDown)
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)
@@ -261,7 +261,7 @@ final class GazeControllerTerminalTests: XCTestCase {
         let exp = expectation(description: "no front app — no tracking change")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             // frontmostPID が nil なので update() は early return → 初期値のまま
-            XCTAssertEqual(self.sut.gazeFrame, .f02_rightDown)
+            XCTAssertEqual(self.sut.gazeFrame, .f03_leftDown)
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)
@@ -317,8 +317,8 @@ final class GazeControllerQuantizeTests: XCTestCase {
             workspaceProvider: mockWorkspace,
             pollInterval: 0.05
         )
-        // origin: (100, 10) — メニューバー上
-        sut.statusItemCenterProvider = { CGPoint(x: 100, y: 10) }
+        // origin: (1200, 1400) — メニューバー上（macOS Y=0 は画面下端）
+        sut.statusItemCenterProvider = { CGPoint(x: 1200, y: 1400) }
         UserDefaults.standard.removeObject(forKey: "didRequestAccessibility")
     }
 
@@ -330,8 +330,9 @@ final class GazeControllerQuantizeTests: XCTestCase {
     }
 
     func testQuantizeRightDown() {
-        // target が origin の右下: dx > 0, dy < 0（macOS Y軸反転後）
-        mockAX.terminalCenter = CGPoint(x: 500, y: 400)  // 右、下方向（macOS Y下が正）
+        // 画面中心より右、上部25%より下 → rightDown
+        // 画面: 3840x2160, 中心x=1920, 上部25%境界 y=1620
+        mockAX.terminalCenter = CGPoint(x: 2500, y: 800)
 
         sut.startPolling()
         let exp = expectation(description: "rightDown")
@@ -343,8 +344,8 @@ final class GazeControllerQuantizeTests: XCTestCase {
     }
 
     func testQuantizeLeftDown() {
-        // target が origin の左下: dx < 0, dy < 0（macOS Y軸反転後）
-        mockAX.terminalCenter = CGPoint(x: 10, y: 400)
+        // 画面中心より左、上部25%より下 → leftDown
+        mockAX.terminalCenter = CGPoint(x: 800, y: 800)
 
         sut.startPolling()
         let exp = expectation(description: "leftDown")
@@ -355,28 +356,27 @@ final class GazeControllerQuantizeTests: XCTestCase {
         wait(for: [exp], timeout: 1.0)
     }
 
-    func testQuantizeLeftUp() {
-        // target が origin の左上: dx < 0, dy > 0（macOS Y軸反転後）
-        // macOS: 上 = Y値が小さい → target.y < origin.y → dy = -(target.y - origin.y) > 0
-        mockAX.terminalCenter = CGPoint(x: 10, y: 5)
+    func testQuantizeLeftHorizontal() {
+        // 水平方向は廃止 → 画面上部でも左下に量子化される
+        mockAX.terminalCenter = CGPoint(x: 800, y: 1800)
 
         sut.startPolling()
-        let exp = expectation(description: "leftUp")
+        let exp = expectation(description: "left down")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertEqual(self.sut.gazeFrame, .f04_leftUp)
+            XCTAssertEqual(self.sut.gazeFrame, .f03_leftDown)
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)
     }
 
-    func testQuantizeRightUp() {
-        // target が origin の右上: dx > 0, dy > 0（macOS Y軸反転後）
-        mockAX.terminalCenter = CGPoint(x: 500, y: 5)
+    func testQuantizeRightHorizontal() {
+        // 水平方向は廃止 → 画面上部でも右下に量子化される
+        mockAX.terminalCenter = CGPoint(x: 2500, y: 1800)
 
         sut.startPolling()
-        let exp = expectation(description: "rightUp")
+        let exp = expectation(description: "right down")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertEqual(self.sut.gazeFrame, .f05_rightUp)
+            XCTAssertEqual(self.sut.gazeFrame, .f02_rightDown)
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)
@@ -415,7 +415,7 @@ final class GazeControllerPollingTests: XCTestCase {
             updateCount += 1
         }
 
-        // 初期値 f02_rightDown → update() で permission check → f02_rightDown（同値なのでコールバックなし）
+        // 初期値 f03_leftDown → update() で permission check → f03_leftDown（同値なのでコールバックなし）
         // ただし permissionStatus が .notDetermined に変わるので mode は変わる
         sut.startPolling()
 

@@ -115,6 +115,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     break  // notDetermined のまま続行（frame02 固定）
                 }
             }
+        } else {
+            // 再ビルド等で AX 権限がリセットされた場合、自動でリクエストする
+            gazeController.requestPermissionIfNeeded { _ in }
         }
     }
 

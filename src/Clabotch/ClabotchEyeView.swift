@@ -9,7 +9,7 @@ final class ClabotchEyeView: NSView {
     // MARK: - 定数
 
     /// キャンバスサイズ（論理ピクセル）
-    static let canvasWidth: CGFloat = 22
+    static let canvasWidth: CGFloat = 20
     static let canvasHeight: CGFloat = 14
 
     /// カラーパレット（v11 §3）
@@ -34,15 +34,28 @@ final class ClabotchEyeView: NSView {
 
     // MARK: - アニメーション定数
 
-    /// DONE アニメーション: 瞳位置の時計回りスピン（§4: 08→09→12→13→14→13→12）
+    /// THINKING アニメーション: 視線を右上⇔左上に交互
+    static let thinkingAnimSequence: [(frame: GazeFrame, yOffset: CGFloat)] = [
+        (.f05_rightUp, 0),
+        (.f04_leftUp,  0),
+    ]
+
+    /// THINKING アニメーション各ステップの間隔
+    static let thinkingAnimInterval: TimeInterval = 0.8
+
+    /// DONE アニメーション: 左下から時計回り2周 → 左下で停止
     static let doneAnimSequence: [GazeFrame] = [
-        .f01_center,    // frame 08: 驚き（中央瞳）
-        .f05_rightUp,   // frame 09: 右上
-        .f02_rightDown, // frame 12: 右下
-        .f03_leftDown,  // frame 13: 左下
-        .f04_leftUp,    // frame 14: 左上（頂点）
-        .f03_leftDown,  // frame 13: 左下（復路）
-        .f02_rightDown, // frame 12: 右下（停止）
+        .f03_leftDown,  // 起点（左下）
+        // 1周目
+        .f04_leftUp,    // 左上
+        .f05_rightUp,   // 右上
+        .f02_rightDown, // 右下
+        .f03_leftDown,  // 左下
+        // 2周目
+        .f04_leftUp,    // 左上
+        .f05_rightUp,   // 右上
+        .f02_rightDown, // 右下
+        .f03_leftDown,  // 左下（停止）
     ]
 
     /// ERROR アニメーション: 顔全体の Y オフセット（§4: 07→10→11→10→07）
@@ -54,14 +67,10 @@ final class ClabotchEyeView: NSView {
         0,  // frame 07: 通常位置（停止）
     ]
 
-    /// まばたきシーケンス（§4: open→half→almost→closed→almost→half→open）
+    /// まばたきシーケンス（白目維持 + 黒目横線で瞬き）
     /// 各要素は (段階, 保持時間)
     static let blinkSequence: [(stage: BlinkStage, duration: TimeInterval)] = [
-        (.half,   0.06),  // 60ms
-        (.almost, 0.06),  // 60ms
-        (.closed, 0.09),  // 90ms
-        (.almost, 0.06),  // 60ms
-        (.half,   0.06),  // 60ms
+        (.closed, 0.12),  // 120ms
     ]
 
     /// DONE アニメーション各ステップの間隔
@@ -71,14 +80,14 @@ final class ClabotchEyeView: NSView {
     static let errorShakeInterval: TimeInterval = 0.08
 
     /// ジャンプアニメーション: Y オフセット（ポイント）のシーケンス（§5 定義）
-    static let jumpSequence: [CGFloat] = [6, 12, 4, 0]
+    static let jumpSequence: [CGFloat] = [6, 12, 4, 0, 4, 8, 2, 0]
 
     /// ジャンプアニメーション各ステップの間隔
     static let jumpInterval: TimeInterval = 0.08
 
     // MARK: - 状態（private(set) でテストから参照可能）
 
-    private(set) var gazeFrame: GazeFrame = .f02_rightDown
+    private(set) var gazeFrame: GazeFrame = .f03_leftDown
     /// まばたきの現在の段階。.open 以外はまばたき中。
     private(set) var blinkStage: BlinkStage = .open
     private(set) var faceColor: NSColor = Palette.faceNormal
@@ -115,6 +124,22 @@ final class ClabotchEyeView: NSView {
     /// まばたきシーケンスの現在ステップ
     private var blinkSeqStep: Int = 0
 
+    /// THINKING アニメーション中の視線フレーム。nil = アニメなし。
+    private(set) var thinkingAnimFrame: GazeFrame?
+
+    /// THINKING アニメーション駆動タイマー
+    private var thinkingTimer: Timer?
+
+    /// THINKING アニメーション現在ステップ
+    private var thinkingStep: Int = 0
+
+    /// DONE 虹色グラデーションアニメーションタイマー
+    private var rainbowTimer: Timer?
+    /// 虹色グラデーションの基準色相（0.0〜1.0）
+    private(set) var rainbowHue: CGFloat = 0
+    /// 虹色グラデーションが有効か
+    private(set) var isRainbowActive: Bool = false
+
     // MARK: - Init
 
     override init(frame: NSRect) {
@@ -129,6 +154,8 @@ final class ClabotchEyeView: NSView {
         blinkTimer?.invalidate()
         animationTimer?.invalidate()
         jumpTimer?.invalidate()
+        rainbowTimer?.invalidate()
+        thinkingTimer?.invalidate()
     }
 
     // MARK: - クリック透過（NSStatusBarButton にイベントを委譲）
@@ -173,8 +200,9 @@ final class ClabotchEyeView: NSView {
             showErrorX = false
             showSurprise = false
             cancelBlink()
+            startThinkingAnimation()
         case .working:
-            faceColor = Palette.faceNormal
+            faceColor = Palette.faceDone  // 暖かいゴールド
             showErrorX = false
             showSurprise = false
             cancelBlink()
@@ -184,6 +212,7 @@ final class ClabotchEyeView: NSView {
             showSurprise = true
             cancelBlink()
             startDoneAnimation()
+            startRainbowAnimation()
         case .error:
             faceColor = Palette.faceError
             showErrorX = true
@@ -285,6 +314,7 @@ final class ClabotchEyeView: NSView {
             } else {
                 // シェイク完了 — オフセットをリセット
                 self.shakeYOffset = 0
+                self.frame.origin.y = 0
                 self.needsDisplay = true
                 timer.invalidate()
                 self.animationTimer = nil
@@ -337,14 +367,77 @@ final class ClabotchEyeView: NSView {
         frame.origin.y = 0
     }
 
-    /// 進行中のアニメーション（DONE スピン / ERROR シェイク / ジャンプ）を停止し状態をリセットする。
+    /// 進行中のアニメーション（THINKING / DONE スピン / ERROR シェイク / ジャンプ / 虹色）を停止し状態をリセットする。
     private func stopAnimation() {
         animationTimer?.invalidate()
         animationTimer = nil
         animationStep = 0
         doneAnimPupilFrame = nil
         shakeYOffset = 0
+        stopThinkingAnimation()
         stopJump()
+        stopRainbow()
+    }
+
+    // MARK: - THINKING アニメーション
+
+    /// THINKING アニメーションを開始する。視線が右上⇔左上を繰り返し、微かに上下に揺れる。
+    private func startThinkingAnimation() {
+        thinkingStep = 0
+        let first = Self.thinkingAnimSequence[0]
+        thinkingAnimFrame = first.frame
+        shakeYOffset = first.yOffset
+
+        thinkingTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.thinkingAnimInterval,
+            repeats: true
+        ) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
+            self.thinkingStep = (self.thinkingStep + 1) % Self.thinkingAnimSequence.count
+            let step = Self.thinkingAnimSequence[self.thinkingStep]
+            self.thinkingAnimFrame = step.frame
+            self.shakeYOffset = step.yOffset
+            self.needsDisplay = true
+        }
+    }
+
+    /// THINKING アニメーションを停止する。
+    private func stopThinkingAnimation() {
+        thinkingTimer?.invalidate()
+        thinkingTimer = nil
+        thinkingAnimFrame = nil
+        thinkingStep = 0
+    }
+
+    // MARK: - 虹色アニメーション
+
+    /// 虹色アニメーションの更新間隔
+    private static let rainbowInterval: TimeInterval = 0.05
+
+    /// 虹色の色相変化速度（1回あたりの変化量）
+    private static let rainbowHueStep: CGFloat = 0.10
+
+    /// DONE 虹グラデーションアニメーションを開始する。顔全体が虹色グラデーションでスクロールする。
+    private func startRainbowAnimation() {
+        rainbowHue = 0
+        isRainbowActive = true
+        rainbowTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.rainbowInterval,
+            repeats: true
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.rainbowHue -= Self.rainbowHueStep
+            if self.rainbowHue < 0.0 { self.rainbowHue += 1.0 }
+            self.needsDisplay = true
+        }
+    }
+
+    /// 虹グラデーションアニメーションを停止する。
+    private func stopRainbow() {
+        rainbowTimer?.invalidate()
+        rainbowTimer = nil
+        rainbowHue = 0
+        isRainbowActive = false
     }
 
     // MARK: - 座標変換ヘルパー
@@ -367,8 +460,12 @@ final class ClabotchEyeView: NSView {
         let ox = (bounds.width  - Self.canvasWidth  * dot) / 2
         let oy = (bounds.height - Self.canvasHeight * dot) / 2
 
-        // ERROR シェイク: 全描画に Y オフセットを適用（patch_011）
-        let dy = Self.shakeOffsetToViewDY(logicalOffset: shakeYOffset, dot: dot)
+        // ERROR シェイク: frame.origin.y でビュー全体を動かす（クリッピング回避）
+        let shakeDY = Self.shakeOffsetToViewDY(logicalOffset: shakeYOffset, dot: dot)
+        if shakeDY != 0 {
+            frame.origin.y = shakeDY
+        }
+        let dy: CGFloat = 0
 
         // 背景クリア（メニューバーは透明）
         ctx.clear(bounds)
@@ -397,9 +494,10 @@ final class ClabotchEyeView: NSView {
                 drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
                 drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy, frame: pupilFrame)
             } else {
-                // 通常: 目 + 瞳
+                // 通常: 目 + 瞳（thinking アニメーション中はそのフレームを優先）
+                let activeFrame = thinkingAnimFrame ?? gazeFrame
                 drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
-                drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy, frame: gazeFrame)
+                drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy, frame: activeFrame)
             }
         }
     }
@@ -417,67 +515,125 @@ final class ClabotchEyeView: NSView {
     }
 
     private func drawFace(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {
-        ctx.setFillColor(faceColor.cgColor)
-        // face: 16×12 at (3, 1)
-        px(ctx, 3, 1, 16, 12, dot, ox: ox, oy: oy, dy: dy)
+        if isRainbowActive {
+            // ultrathink 風グラデーション: オレンジ→ピンク→パープル→ブルー
+            let faceWidth: CGFloat = Self.canvasWidth
+            for col in 0..<Int(faceWidth) {
+                let t = (rainbowHue + CGFloat(col) / faceWidth).truncatingRemainder(dividingBy: 1.0)
+                let color = Self.ultrathinkColor(at: t)
+                ctx.setFillColor(color.cgColor)
+                px(ctx, CGFloat(col), 0, 1, Self.canvasHeight, dot, ox: ox, oy: oy, dy: dy)
+            }
+        } else {
+            ctx.setFillColor(faceColor.cgColor)
+            // face: 22×14 — キャンバス全体
+            px(ctx, 0, 0, Self.canvasWidth, Self.canvasHeight, dot, ox: ox, oy: oy, dy: dy)
+        }
     }
 
     private func drawEyeSockets(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {
         ctx.setFillColor(Palette.eyeWhite.cgColor)
-        // 左目ソケット: 4×8 at (5, 3)
-        px(ctx, 5, 3, 4, 8, dot, ox: ox, oy: oy, dy: dy)
-        // 右目ソケット: 4×8 at (13, 3)
-        px(ctx, 13, 3, 4, 8, dot, ox: ox, oy: oy, dy: dy)
+        // 左目ソケット: 5×10 at (2, 2)
+        px(ctx, 2, 2, 5, 10, dot, ox: ox, oy: oy, dy: dy)
+        // 右目ソケット: 5×10 at (13, 2)
+        px(ctx, 13, 2, 5, 10, dot, ox: ox, oy: oy, dy: dy)
     }
 
-    /// v11 §4, §8: フレーム丸ごと切り替え（座標計算禁止）
+    /// フレーム丸ごと切り替え（座標計算禁止）
     private func drawPupils(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat,
                             dy: CGFloat = 0, frame: GazeFrame) {
         ctx.setFillColor(Palette.pupil.cgColor)
 
-        // 左目ソケット基点: (sx=5, sy=3)
-        // 右目ソケット基点: (sx=13, sy=3)
+        // 左目ソケット基点: (sx=2, sy=2) サイズ 5×10
+        // 右目ソケット基点: (sx=13, sy=2) サイズ 5×10
+        // 瞳中央: 左(3,4) 右(14,4) サイズ 3×8 — ソケット内で移動幅 1dot(横), 2dot(縦)
         let (lx, ly, rx, ry): (CGFloat, CGFloat, CGFloat, CGFloat) = {
             switch frame {
-            case .f01_center:    return (5+1, 3+1, 13+1, 3+1)    // 中央
-            case .f02_rightDown: return (5+2, 3+2, 13+2, 3+2)    // 右下
-            case .f03_leftDown:  return (5+0, 3+2, 13+0, 3+2)    // 左下
-            case .f04_leftUp:    return (5+0, 3+0, 13+0, 3+0)    // 左上
-            case .f05_rightUp:   return (5+2, 3+0, 13+2, 3+0)    // 右上
+            case .f01_center:    return (3,   4,   14,   4)      // 中央
+            case .f02_rightDown: return (3+1, 4,   14+1, 4)     // 右下
+            case .f03_leftDown:  return (3-1, 4,   14-1, 4)     // 左下
+            case .f04_leftUp:    return (3-1, 4-2, 14-1, 4-2)   // 左上
+            case .f05_rightUp:   return (3+1, 4-2, 14+1, 4-2)   // 右上
+            case .f06_right:     return (3+1, 4,   14+1, 4)     // 右（水平）
+            case .f07_left:      return (3-1, 4,   14-1, 4)     // 左（水平）
             }
         }()
 
-        // 瞳: 2×6
-        px(ctx, lx, ly, 2, 6, dot, ox: ox, oy: oy, dy: dy)
-        px(ctx, rx, ry, 2, 6, dot, ox: ox, oy: oy, dy: dy)
+        // 瞳: 3×8（左下/右下は row 7 で1px 欠けのカスタム形状）
+        if frame == .f03_leftDown {
+            // 左下: 両目とも右端1px 欠け
+            px(ctx, lx, ly,   3, 3, dot, ox: ox, oy: oy, dy: dy)   // rows 4-6
+            px(ctx, lx, ly+3, 2, 1, dot, ox: ox, oy: oy, dy: dy)   // row 7（右端欠け）
+            px(ctx, lx, ly+4, 3, 4, dot, ox: ox, oy: oy, dy: dy)   // rows 8-11
+            px(ctx, rx, ry,   3, 3, dot, ox: ox, oy: oy, dy: dy)
+            px(ctx, rx, ry+3, 2, 1, dot, ox: ox, oy: oy, dy: dy)
+            px(ctx, rx, ry+4, 3, 4, dot, ox: ox, oy: oy, dy: dy)
+        } else if frame == .f02_rightDown || frame == .f05_rightUp {
+            // 右下/右上: 左下の水平反転 → 両目とも左端1px 欠け
+            px(ctx, lx, ly,   3, 3, dot, ox: ox, oy: oy, dy: dy)   // rows 4-6
+            px(ctx, lx+1, ly+3, 2, 1, dot, ox: ox, oy: oy, dy: dy) // row 7（左端欠け）
+            px(ctx, lx, ly+4, 3, 4, dot, ox: ox, oy: oy, dy: dy)   // rows 8-11
+            px(ctx, rx, ry,   3, 3, dot, ox: ox, oy: oy, dy: dy)
+            px(ctx, rx+1, ry+3, 2, 1, dot, ox: ox, oy: oy, dy: dy)
+            px(ctx, rx, ry+4, 3, 4, dot, ox: ox, oy: oy, dy: dy)
+        } else if frame == .f04_leftUp {
+            // 左上: 左下と同じ形状 → 両目とも右端1px 欠け
+            px(ctx, lx, ly,   3, 3, dot, ox: ox, oy: oy, dy: dy)
+            px(ctx, lx, ly+3, 2, 1, dot, ox: ox, oy: oy, dy: dy)
+            px(ctx, lx, ly+4, 3, 4, dot, ox: ox, oy: oy, dy: dy)
+            px(ctx, rx, ry,   3, 3, dot, ox: ox, oy: oy, dy: dy)
+            px(ctx, rx, ry+3, 2, 1, dot, ox: ox, oy: oy, dy: dy)
+            px(ctx, rx, ry+4, 3, 4, dot, ox: ox, oy: oy, dy: dy)
+        } else {
+            px(ctx, lx, ly, 3, 8, dot, ox: ox, oy: oy, dy: dy)
+            px(ctx, rx, ry, 3, 8, dot, ox: ox, oy: oy, dy: dy)
+        }
     }
 
-    /// 半閉じ（patch_012）: ソケット 4×4 at (5,5)/(13,5) + 瞳 2×2 中央
+    /// 半閉じ: フルサイズ白目ソケット + 瞳横棒線
     private func drawBlinkHalf(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {
-        // 縮小ソケット（白）
-        ctx.setFillColor(Palette.eyeWhite.cgColor)
-        px(ctx, 5, 5, 4, 4, dot, ox: ox, oy: oy, dy: dy)
-        px(ctx, 13, 5, 4, 4, dot, ox: ox, oy: oy, dy: dy)
-        // 瞳 2×2 中央
+        drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
         ctx.setFillColor(Palette.pupil.cgColor)
-        px(ctx, 6, 6, 2, 2, dot, ox: ox, oy: oy, dy: dy)
-        px(ctx, 14, 6, 2, 2, dot, ox: ox, oy: oy, dy: dy)
+        // ソケット中央に横線: 5×1 at (3, 7) / (14, 7)
+        px(ctx, 2, 7, 5, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 13, 7, 5, 1, dot, ox: ox, oy: oy, dy: dy)
     }
 
-    /// ほぼ閉じ（patch_012）: ソケット 4×2 at (5,6)/(13,6)、瞳なし
+    /// ほぼ閉じ: フルサイズ白目ソケット + 瞳横棒線
     private func drawBlinkAlmost(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {
-        ctx.setFillColor(Palette.eyeWhite.cgColor)
-        px(ctx, 5, 6, 4, 2, dot, ox: ox, oy: oy, dy: dy)
-        px(ctx, 13, 6, 4, 2, dot, ox: ox, oy: oy, dy: dy)
+        drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
+        ctx.setFillColor(Palette.pupil.cgColor)
+        px(ctx, 2, 7, 5, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 13, 7, 5, 1, dot, ox: ox, oy: oy, dy: dy)
     }
 
     private func drawBlinkClosed(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {
-        // frame06: 閉じ目 — 目のソケット領域に横線を描画
+        // 閉じ目 — 白目ソケットを残し、瞳の代わりに横棒線
+        drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
         ctx.setFillColor(Palette.pupil.cgColor)
-        // 左目: 4×1 at (5, 7) — ソケットの中央付近
-        px(ctx, 5, 7, 4, 1, dot, ox: ox, oy: oy, dy: dy)
-        // 右目: 4×1 at (13, 7) — ソケットの中央付近
-        px(ctx, 13, 7, 4, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 2, 7, 5, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 13, 7, 5, 1, dot, ox: ox, oy: oy, dy: dy)
+    }
+
+    /// ultrathink 風グラデーションの色を t (0.0〜1.0) で補間する。
+    /// オレンジ → ホットピンク → パープル → ブルー → オレンジ のループ。
+    static func ultrathinkColor(at t: CGFloat) -> NSColor {
+        // 色停止点（ultrathink スクリーンショット準拠）
+        let stops: [(r: CGFloat, g: CGFloat, b: CGFloat)] = [
+            (0.98, 0.72, 0.50),  // 淡オレンジ #FAB880
+            (0.96, 0.55, 0.68),  // 淡ピンク #F58DAD
+            (0.80, 0.55, 0.90),  // 淡パープル #CC8CE6
+            (0.58, 0.64, 0.94),  // 淡ブルー #94A3F0
+        ]
+        let count = stops.count
+        let scaled = t * CGFloat(count)
+        let i = Int(scaled) % count
+        let j = (i + 1) % count
+        let frac = scaled - floor(scaled)
+        let r = stops[i].r + (stops[j].r - stops[i].r) * frac
+        let g = stops[i].g + (stops[j].g - stops[i].g) * frac
+        let b = stops[i].b + (stops[j].b - stops[i].b) * frac
+        return NSColor(red: r, green: g, blue: b, alpha: 1.0)
     }
 
     /// NSColor を #RRGGBB 文字列に変換する（デバッグログ用）
@@ -490,16 +646,26 @@ final class ClabotchEyeView: NSView {
     }
 
     private func drawErrorX(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat, dy: CGFloat = 0) {
-        ctx.setFillColor(Palette.errorX.cgColor)
-        // 左目に × — 対角線を2×2ドットで表現
-        px(ctx, 5, 4, 2, 2, dot, ox: ox, oy: oy, dy: dy)
-        px(ctx, 7, 6, 2, 2, dot, ox: ox, oy: oy, dy: dy)
-        px(ctx, 5, 6, 2, 2, dot, ox: ox, oy: oy, dy: dy)
-        px(ctx, 7, 4, 2, 2, dot, ox: ox, oy: oy, dy: dy)
-        // 右目に ×
-        px(ctx, 13, 4, 2, 2, dot, ox: ox, oy: oy, dy: dy)
-        px(ctx, 15, 6, 2, 2, dot, ox: ox, oy: oy, dy: dy)
-        px(ctx, 13, 6, 2, 2, dot, ox: ox, oy: oy, dy: dy)
-        px(ctx, 15, 4, 2, 2, dot, ox: ox, oy: oy, dy: dy)
+        ctx.setFillColor(Palette.pupil.cgColor)
+        // 左目: 目を瞑ったパターン
+        px(ctx, 3,  4, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 4,  5, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 5,  6, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 3,  7, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 4,  7, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 6,  7, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 5,  8, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 4,  9, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 3, 10, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        // 右目: 左目を水平反転
+        px(ctx, 16,  4, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 15,  5, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 14,  6, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 16,  7, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 15,  7, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 13,  7, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 14,  8, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 15,  9, 1, 1, dot, ox: ox, oy: oy, dy: dy)
+        px(ctx, 16, 10, 1, 1, dot, ox: ox, oy: oy, dy: dy)
     }
 }

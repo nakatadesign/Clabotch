@@ -18,7 +18,7 @@ final class ClabotchEyeViewTests: XCTestCase {
     // MARK: - 初期状態
 
     func testInitialState() {
-        XCTAssertEqual(sut.gazeFrame, .f02_rightDown)
+        XCTAssertEqual(sut.gazeFrame, .f03_leftDown)
         XCTAssertEqual(sut.blinkStage, .open)
         XCTAssertFalse(sut.isBlinkClosed)
         XCTAssertFalse(sut.showErrorX)
@@ -35,19 +35,18 @@ final class ClabotchEyeViewTests: XCTestCase {
     }
 
     func testSetGazeFrameSameFrameNoOp() {
-        // 初期値は .f02_rightDown
+        // 初期値は .f03_leftDown
         sut.needsDisplay = false
-        sut.setGazeFrame(.f02_rightDown)
+        sut.setGazeFrame(.f03_leftDown)
         // 同一 frame → needsDisplay は変わらない
         XCTAssertFalse(sut.needsDisplay)
     }
 
     // MARK: - triggerBlink
 
-    func testTriggerBlinkSetsHalfStage() {
-        // patch_012: triggerBlink() の最初のステップは half
+    func testTriggerBlinkSetsClosedStage() {
         sut.triggerBlink()
-        XCTAssertEqual(sut.blinkStage, .half)
+        XCTAssertEqual(sut.blinkStage, .closed)
         XCTAssertTrue(sut.isBlinkClosed)
     }
 
@@ -68,49 +67,33 @@ final class ClabotchEyeViewTests: XCTestCase {
     // MARK: - まばたきシーケンス（patch_012）
 
     func testBlinkSequenceDefinition() {
-        // §4 定義: open → half(60ms) → almost(60ms) → closed(90ms) → almost(60ms) → half(60ms) → open
+        // 白目維持 + 黒目横線で瞬き: closed(120ms) のみ
         let seq = ClabotchEyeView.blinkSequence
-        XCTAssertEqual(seq.count, 5)
-        XCTAssertEqual(seq[0].stage, .half)
-        XCTAssertEqual(seq[1].stage, .almost)
-        XCTAssertEqual(seq[2].stage, .closed)
-        XCTAssertEqual(seq[3].stage, .almost)
-        XCTAssertEqual(seq[4].stage, .half)
-
-        // タイミング検証
-        XCTAssertEqual(seq[0].duration, 0.06, accuracy: 0.001)
-        XCTAssertEqual(seq[1].duration, 0.06, accuracy: 0.001)
-        XCTAssertEqual(seq[2].duration, 0.09, accuracy: 0.001)
-        XCTAssertEqual(seq[3].duration, 0.06, accuracy: 0.001)
-        XCTAssertEqual(seq[4].duration, 0.06, accuracy: 0.001)
+        XCTAssertEqual(seq.count, 1)
+        XCTAssertEqual(seq[0].stage, .closed)
+        XCTAssertEqual(seq[0].duration, 0.12, accuracy: 0.001)
     }
 
-    func testBlinkTotalDuration330ms() {
-        // §4: 合計 330ms
+    func testBlinkTotalDuration120ms() {
         let total = ClabotchEyeView.blinkSequence.reduce(0.0) { $0 + $1.duration }
-        XCTAssertEqual(total, 0.33, accuracy: 0.001)
+        XCTAssertEqual(total, 0.12, accuracy: 0.001)
     }
 
     func testBlinkIgnoredWhileAlreadyBlinking() {
-        // 再発火が無視され、元のスケジュールどおり 330ms で open に戻ることを検証
         sut.triggerBlink()
-        XCTAssertEqual(sut.blinkStage, .half)
+        XCTAssertEqual(sut.blinkStage, .closed)
 
-        // almost に遷移した後に再発火を試みる
+        // closed 中に再発火 → 無視されるべき
+        sut.triggerBlink()
+        XCTAssertEqual(sut.blinkStage, .closed, "まばたき中の再発火は無視されるべき")
+
+        // 120ms + α で open に戻る
         let exp = expectation(description: "再発火が無視されて元のタイミングで open に戻る")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-            // almost に遷移済み
-            XCTAssertEqual(self.sut.blinkStage, .almost, "60ms 後は almost")
-            // 再発火 → 無視されるべき
-            self.sut.triggerBlink()
-            XCTAssertEqual(self.sut.blinkStage, .almost, "まばたき中の再発火は無視されるべき")
-        }
-        // 元のタイミング（330ms + α）で open に戻ることを確認
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            XCTAssertEqual(self.sut.blinkStage, .open, "再発火しても元のスケジュールで open に戻るべき")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            XCTAssertEqual(self.sut.blinkStage, .open)
             exp.fulfill()
         }
-        wait(for: [exp], timeout: 1.5)
+        wait(for: [exp], timeout: 1.0)
     }
 
     func testBlinkStageAllCases() {
@@ -131,6 +114,13 @@ final class ClabotchEyeViewTests: XCTestCase {
         XCTAssertFalse(sut.showErrorX)
         XCTAssertFalse(sut.showSurprise)
         XCTAssertFalse(sut.isBlinkClosed)
+    }
+
+    func testSetPhaseAppearanceWorking() {
+        sut.setPhaseAppearance(phase: .working(toolName: "Bash"))
+        XCTAssertEqual(sut.faceColor, ClabotchEyeView.Palette.faceDone, "working は暖かいゴールド")
+        XCTAssertFalse(sut.showErrorX)
+        XCTAssertFalse(sut.showSurprise)
     }
 
     func testSetPhaseAppearanceError() {
@@ -191,7 +181,7 @@ final class ClabotchEyeViewTests: XCTestCase {
 
     func testDrawDoesNotCrashForAllFrames() {
         // 全 GazeFrame で draw() がクラッシュしないことを確認
-        let frames: [GazeFrame] = [.f01_center, .f02_rightDown, .f03_leftDown, .f04_leftUp, .f05_rightUp]
+        let frames: [GazeFrame] = [.f01_center, .f02_rightDown, .f03_leftDown, .f04_leftUp, .f05_rightUp, .f06_right, .f07_left]
         for frame in frames {
             sut.setGazeFrame(frame)
             sut.display()  // NSView.display() → draw(_:) を強制呼び出し
@@ -217,10 +207,10 @@ final class ClabotchEyeViewTests: XCTestCase {
     }
 
     func testDrawAllBlinkStagesDoesNotCrash() {
-        // patch_012: 全 BlinkStage で描画がクラッシュしないことを確認
-        // half（triggerBlink 直後）
+        // 全 BlinkStage で描画がクラッシュしないことを確認
+        // closed（triggerBlink 直後）
         sut.triggerBlink()
-        XCTAssertEqual(sut.blinkStage, .half)
+        XCTAssertEqual(sut.blinkStage, .closed)
         sut.display()
 
         // sleeping → closed（直接設定）
@@ -232,22 +222,6 @@ final class ClabotchEyeViewTests: XCTestCase {
         sut.setPhaseAppearance(phase: .idle)
         XCTAssertEqual(sut.blinkStage, .open)
         sut.display()
-    }
-
-    func testDrawBlinkAlmostDoesNotCrash() {
-        // patch_012: .almost 分岐が確実に実行されることを検証
-        // half(60ms) 経過後に almost に遷移する
-        sut.triggerBlink()
-        XCTAssertEqual(sut.blinkStage, .half)
-
-        let exp = expectation(description: "almost ステージで描画")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-            // 60ms 経過後、almost に遷移しているはず
-            XCTAssertEqual(self.sut.blinkStage, .almost, "60ms 後は almost ステージであるべき")
-            self.sut.display()  // .almost 分岐の描画を実行
-            exp.fulfill()
-        }
-        wait(for: [exp], timeout: 1.0)
     }
 
     // MARK: - frame 06/07/08 描画状態マッピング
@@ -281,33 +255,31 @@ final class ClabotchEyeViewTests: XCTestCase {
 
     // MARK: - DONE アニメーション（patch_011）
 
-    func testDoneAnimationStartsWithCenterPupil() {
-        // DONE に遷移した直後、アニメーション初期フレームは中央瞳（frame 08）
+    func testDoneAnimationStartsWithLeftDown() {
+        // DONE に遷移した直後、アニメーション初期フレームは左下
         sut.setPhaseAppearance(phase: .done(elapsedMs: 5000))
-        XCTAssertEqual(sut.doneAnimPupilFrame, .f01_center)
+        XCTAssertEqual(sut.doneAnimPupilFrame, .f03_leftDown)
     }
 
     func testDoneAnimationSequenceProgresses() {
-        // アニメーションが進行して全ステップを通過することを確認
+        // アニメーションが進行して左下で停止することを確認
         sut.setPhaseAppearance(phase: .done(elapsedMs: 3000))
 
         let exp = expectation(description: "DONE アニメーション完了")
         let totalDuration = ClabotchEyeView.doneAnimInterval * Double(ClabotchEyeView.doneAnimSequence.count)
         DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration + 0.1) {
-            // 最終フレームは f02_rightDown（frame 12）で停止
-            XCTAssertEqual(self.sut.doneAnimPupilFrame, .f02_rightDown)
+            XCTAssertEqual(self.sut.doneAnimPupilFrame, .f03_leftDown)
             exp.fulfill()
         }
-        wait(for: [exp], timeout: 2.0)
+        wait(for: [exp], timeout: 3.0)
     }
 
     func testDoneAnimationSequenceDefinition() {
-        // アニメーション順が §4 定義（08→09→12→13→14→13→12）に一致
-        let expected: [GazeFrame] = [
-            .f01_center, .f05_rightUp, .f02_rightDown,
-            .f03_leftDown, .f04_leftUp, .f03_leftDown, .f02_rightDown,
-        ]
-        XCTAssertEqual(ClabotchEyeView.doneAnimSequence, expected)
+        // 左下起点 → 時計回り2周 → 左下停止
+        let seq = ClabotchEyeView.doneAnimSequence
+        XCTAssertEqual(seq.count, 9)
+        XCTAssertEqual(seq.first, .f03_leftDown)
+        XCTAssertEqual(seq.last, .f03_leftDown)
     }
 
     func testDoneAnimationStopsOnPhaseChange() {
@@ -364,10 +336,10 @@ final class ClabotchEyeViewTests: XCTestCase {
     }
 
     func testErrorShakeStopsOnPhaseChange() {
-        // ERROR シェイク中に thinking に遷移するとシェイクが停止する
+        // ERROR シェイク中に idle に遷移するとシェイクが停止する
         sut.setPhaseAppearance(phase: .error(toolName: "Bash", message: nil))
 
-        sut.setPhaseAppearance(phase: .thinking)
+        sut.setPhaseAppearance(phase: .idle)
         XCTAssertEqual(sut.shakeYOffset, 0)
         XCTAssertNil(sut.doneAnimPupilFrame)
     }
@@ -392,8 +364,8 @@ final class ClabotchEyeViewTests: XCTestCase {
     // MARK: - ジャンプアニメーション（§5）
 
     func testJumpSequenceDefinition() {
-        // §5 定義: ↑6px → ↑12px → ↑4px → 原点
-        let expected: [CGFloat] = [6, 12, 4, 0]
+        // 2回ジャンプ: 1回目 ↑6→↑12→↑4→原点、2回目 ↑4→↑8→↑2→原点
+        let expected: [CGFloat] = [6, 12, 4, 0, 4, 8, 2, 0]
         XCTAssertEqual(ClabotchEyeView.jumpSequence, expected)
     }
 
@@ -429,6 +401,124 @@ final class ClabotchEyeViewTests: XCTestCase {
         sut.setPhaseAppearance(phase: .idle)
         XCTAssertFalse(sut.isJumping)
         XCTAssertEqual(sut.frame.origin.y, 0)
+    }
+
+    // MARK: - 虹色アニメーション（DONE）
+
+    func testDoneStartsRainbowGradient() {
+        sut.setPhaseAppearance(phase: .done(elapsedMs: 5000))
+        XCTAssertTrue(sut.isRainbowActive, "done で虹グラデーションが有効になるべき")
+    }
+
+    func testRainbowStopsOnPhaseChange() {
+        sut.setPhaseAppearance(phase: .done(elapsedMs: 5000))
+        XCTAssertTrue(sut.isRainbowActive)
+
+        sut.setPhaseAppearance(phase: .idle)
+        XCTAssertFalse(sut.isRainbowActive, "idle に戻ると虹が停止するべき")
+    }
+
+    func testRainbowHueAdvances() {
+        sut.setPhaseAppearance(phase: .done(elapsedMs: 5000))
+
+        let exp = expectation(description: "rainbowHue が進行する")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            XCTAssertGreaterThan(self.sut.rainbowHue, 0, "色相が進行しているべき")
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+    }
+
+    func testNonDonePhasesDoNotHaveRainbow() {
+        let phases: [MascotPhase] = [
+            .idle, .thinking, .working(toolName: "Bash"),
+            .error(toolName: "Bash", message: nil), .sleeping
+        ]
+        for phase in phases {
+            sut.setPhaseAppearance(phase: phase)
+            XCTAssertFalse(sut.isRainbowActive,
+                "\(phase.debugName) では虹グラデーションが発動しないべき")
+        }
+    }
+
+    func testDrawDuringRainbowDoesNotCrash() {
+        // 虹アニメーション中の描画がクラッシュしない
+        sut.setPhaseAppearance(phase: .done(elapsedMs: 5000))
+        let exp = expectation(description: "虹色描画")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            self.sut.display()
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.0)
+    }
+
+    // MARK: - THINKING アニメーション
+
+    func testThinkingStartsGazeAnimation() {
+        sut.setPhaseAppearance(phase: .thinking)
+        // thinking 開始直後、thinkingAnimFrame が設定される
+        XCTAssertNotNil(sut.thinkingAnimFrame, "thinking ではアニメーションが開始されるべき")
+        XCTAssertEqual(sut.thinkingAnimFrame, .f05_rightUp, "初期フレームは右上")
+    }
+
+    func testThinkingAnimationAlternatesGaze() {
+        sut.setPhaseAppearance(phase: .thinking)
+        XCTAssertEqual(sut.thinkingAnimFrame, .f05_rightUp, "初期は右上")
+
+        let exp = expectation(description: "thinking 視線が左上に遷移")
+        // 0.8s 後に左上に遷移
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            XCTAssertEqual(self.sut.thinkingAnimFrame, .f04_leftUp,
+                           "1ステップ後は左上であるべき")
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.5)
+    }
+
+    func testThinkingAnimationNoVerticalBob() {
+        // thinking アニメーションは上下揺れなし
+        sut.setPhaseAppearance(phase: .thinking)
+        XCTAssertEqual(sut.shakeYOffset, 0, accuracy: 0.01,
+                       "thinking アニメーションに上下揺れはないべき")
+    }
+
+    func testThinkingAnimationStopsOnPhaseChange() {
+        sut.setPhaseAppearance(phase: .thinking)
+        XCTAssertNotNil(sut.thinkingAnimFrame)
+
+        sut.setPhaseAppearance(phase: .idle)
+        XCTAssertNil(sut.thinkingAnimFrame, "idle に遷移すると thinking アニメーションが停止するべき")
+        XCTAssertEqual(sut.shakeYOffset, 0, "Y オフセットもリセットされるべき")
+    }
+
+    func testThinkingAnimationSequenceDefinition() {
+        let seq = ClabotchEyeView.thinkingAnimSequence
+        XCTAssertEqual(seq.count, 2)
+        XCTAssertEqual(seq[0].frame, .f05_rightUp)
+        XCTAssertEqual(seq[1].frame, .f04_leftUp)
+    }
+
+    func testNonThinkingPhasesDoNotHaveThinkingAnim() {
+        let phases: [MascotPhase] = [
+            .idle, .working(toolName: "Bash"),
+            .done(elapsedMs: 1000), .error(toolName: "Bash", message: nil), .sleeping
+        ]
+        for phase in phases {
+            sut.setPhaseAppearance(phase: phase)
+            XCTAssertNil(sut.thinkingAnimFrame,
+                         "\(phase.debugName) では thinking アニメーションが発動しないべき")
+        }
+    }
+
+    func testDrawDuringThinkingAnimDoesNotCrash() {
+        sut.setPhaseAppearance(phase: .thinking)
+        sut.display()
+        let exp = expectation(description: "thinking アニメ中の描画")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.sut.display()
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1.5)
     }
 
     // MARK: - hitTest 透過

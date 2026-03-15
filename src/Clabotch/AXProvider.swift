@@ -55,7 +55,13 @@ struct RealAXProvider: AXProvider {
         var size = CGSize.zero
         AXValueGetValue(posRef as! AXValue, .cgPoint, &pos)
         AXValueGetValue(sizeRef as! AXValue, .cgSize, &size)
-        return (CGPoint(x: pos.x + size.width / 2, y: pos.y + size.height / 2), nil)
+
+        // AX 座標系（Y=0 が画面上端、下向き正）→ Cocoa 座標系（Y=0 が画面下端、上向き正）に変換
+        // マルチモニタ: primary screen (screens[0]) の高さが座標変換の基準
+        let screenHeight = NSScreen.screens.first?.frame.height ?? 1440
+        let centerX = pos.x + size.width / 2
+        let centerY = screenHeight - (pos.y + size.height / 2)
+        return (CGPoint(x: centerX, y: centerY), nil)
     }
 }
 

@@ -161,8 +161,11 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .sessionStart(sessionID: "s1"))
         stateMachine.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 0))
 
-        waitForCondition(description: "bubble shows done text without time") {
-            self.activeBubbleSpy.lastText == "完了！"
+        // hookElapsedMs=0 の場合、StateMachine が startedAt からフォールバック計算するため
+        // 数ミリ秒の差が生じて "完了！(0秒)" になることがある
+        waitForCondition(description: "bubble shows done text") {
+            guard let text = self.activeBubbleSpy.lastText else { return false }
+            return text.hasPrefix("完了！")
         }
     }
 
@@ -324,15 +327,15 @@ final class CoordinatorIntegrationTests: XCTestCase {
         // thinking phase → override=none
         stateMachine.handle(event: .sessionStart(sessionID: "s1"))
 
-        // mock 設定: ターミナルが左下にある
+        // mock 設定: ターミナルが右下にある（初期値 f03_leftDown と異なる方向）
         mockAX.isTrusted = true
         mockWorkspace.bundleIdentifier = "com.apple.Terminal"
         mockWorkspace.pid = 12345
-        mockAX.terminalCenter = CGPoint(x: 100, y: 500)
+        mockAX.terminalCenter = CGPoint(x: 2500, y: 500)
 
         // polling で gazeFrame が更新されるのを待つ
         waitForCondition(description: "eyeView gazeFrame changes") {
-            self.eyeView.gazeFrame != .f02_rightDown
+            self.eyeView.gazeFrame != .f03_leftDown
         }
     }
 
@@ -403,8 +406,8 @@ final class CoordinatorIntegrationTests: XCTestCase {
         )
         testBinder.bind()
 
-        // GazeController 初期値: .fixed(.f02_rightDown, reason: .terminalNotFound)
-        XCTAssertEqual(gc.mode, .fixed(.f02_rightDown, reason: .terminalNotFound))
+        // GazeController 初期値: .fixed(.f03_leftDown, reason: .terminalNotFound)
+        XCTAssertEqual(gc.mode, .fixed(.f03_leftDown, reason: .terminalNotFound))
 
         // start() → onPhaseChanged(.idle) → setOverride(.none) → 常にカーソル追跡
         sm.start()
@@ -428,11 +431,11 @@ final class CoordinatorIntegrationTests: XCTestCase {
         mockAX.isTrusted = true
         mockWorkspace.bundleIdentifier = "com.apple.Terminal"
         mockWorkspace.pid = 12345
-        mockAX.terminalCenter = CGPoint(x: 100, y: 500)
+        mockAX.terminalCenter = CGPoint(x: 2500, y: 500)
 
-        // polling で gazeFrame が変化することを確認
+        // polling で gazeFrame が変化することを確認（初期値 f03_leftDown → f02_rightDown）
         waitForCondition(description: "gazeFrame changes via polling") {
-            self.eyeView.gazeFrame != .f02_rightDown
+            self.eyeView.gazeFrame != .f03_leftDown
         }
 
         let frameAfterPolling = eyeView.gazeFrame

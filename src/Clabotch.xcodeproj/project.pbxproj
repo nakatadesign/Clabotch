@@ -27,6 +27,7 @@
 		3E9F399F6BBD8C9CDA19B22E /* MockSocketOps.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6AFF63313CAE4EFD697FFE3 /* MockSocketOps.swift */; };
 		4507BDCA95968FC5B5010A1C /* BlinkControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4476ECA689707A583A562D9D /* BlinkControllerTests.swift */; };
 		4733B842423CC2C183621E54 /* HookServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D641782D88ED126B539ECC /* HookServer.swift */; };
+		49949F4CD29907A86FD445E3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DB38CD20CA02DABC34F101F1 /* Assets.xcassets */; };
 		51E4DD78AA01757BCDBBBAF0 /* MascotPhase.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB06693ED6AB5DBC4E53A91D /* MascotPhase.swift */; };
 		5A73AA822128B508F58B2B27 /* GazeTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A076E8747B07F4A438A5A17B /* GazeTypes.swift */; };
 		62E754140E7D27FDE0ECB018 /* EventParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96A3EDC104C593DEBC49336D /* EventParser.swift */; };
@@ -100,6 +101,7 @@
 		D6D641782D88ED126B539ECC /* HookServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookServer.swift; sourceTree = "<group>"; };
 		D7A0BEDE8BFCEAE3E5668F6B /* GazeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GazeController.swift; sourceTree = "<group>"; };
 		DACCB80479EEB2BBB2EF9272 /* EventDeduplicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDeduplicator.swift; sourceTree = "<group>"; };
+		DB38CD20CA02DABC34F101F1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E194BBABE1C504778E137A78 /* LaunchAtLoginManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLoginManagerTests.swift; sourceTree = "<group>"; };
 		E951BFD335706B02EB25141C /* AppDelegateCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegateCoordinatorTests.swift; sourceTree = "<group>"; };
 		F312F0F7D2D7BC2D60314798 /* BubbleWindowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleWindowTests.swift; sourceTree = "<group>"; };
@@ -112,6 +114,7 @@
 			isa = PBXGroup;
 			children = (
 				F7EE57E153DC91A088C8A04A /* AppDelegate.swift */,
+				DB38CD20CA02DABC34F101F1 /* Assets.xcassets */,
 				2DCB9955406A6BDA3D525A4A /* AXProvider.swift */,
 				900A8C1103779FDB804969C9 /* BlinkController.swift */,
 				34F9FFEEC473EC2FAA7DB133 /* BubblePresenting.swift */,
@@ -190,6 +193,7 @@
 			buildConfigurationList = 5B8B426E7C850681CDDC3846 /* Build configuration list for PBXNativeTarget "Clabotch" */;
 			buildPhases = (
 				169A9C25C2917CFD2B807BB9 /* Sources */,
+				36C5C6EE53435D359BC637CB /* Resources */,
 			);
 			buildRules = (
 			);
@@ -250,6 +254,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		36C5C6EE53435D359BC637CB /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				49949F4CD29907A86FD445E3 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		169A9C25C2917CFD2B807BB9 /* Sources */ = {

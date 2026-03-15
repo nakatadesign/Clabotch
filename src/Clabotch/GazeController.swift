@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import os.log
 
 /// 視線追跡コントローラー。main thread 専用。
@@ -13,8 +13,8 @@ final class GazeController {
 
     // MARK: - 公開状態
 
-    private(set) var mode: GazeMode = .fixed(.f02_rightDown, reason: .terminalNotFound)
-    private(set) var gazeFrame: GazeFrame = .f02_rightDown
+    private(set) var mode: GazeMode = .fixed(.f03_leftDown, reason: .terminalNotFound)
+    private(set) var gazeFrame: GazeFrame = .f03_leftDown
     private(set) var permissionStatus: GazePermissionStatus = .notDetermined
 
     // MARK: - Callback
@@ -200,8 +200,8 @@ final class GazeController {
         guard permissionStatus == .granted else {
             let reason: FixedGazeReason = (permissionStatus == .notDetermined)
                 ? .permissionNotDetermined : .permissionDenied
-            os_log(.default, "👁 Gaze: 権限なし: %{public}@ → f02_rightDown", String(describing: permissionStatus))
-            applyGaze(.fixed(.f02_rightDown, reason: reason), frame: .f02_rightDown)
+            os_log(.default, "👁 Gaze: 権限なし: %{public}@ → f03_leftDown", String(describing: permissionStatus))
+            applyGaze(.fixed(.f03_leftDown, reason: reason), frame: .f03_leftDown)
             return
         }
 
@@ -220,28 +220,38 @@ final class GazeController {
         // ② 量子化
         if let target = center {
             let frame = quantize(from: origin, to: target)
+            os_log(.default, "👁 Gaze: origin=(%.0f,%.0f) target=(%.0f,%.0f) dx=%.0f dy=%.0f → %{public}@",
+                   origin.x, origin.y, target.x, target.y,
+                   target.x - origin.x, target.y - origin.y,
+                   String(describing: frame))
             applyGaze(.tracking, frame: frame)
         }
     }
 
     private func quantize(from origin: CGPoint, to target: CGPoint) -> GazeFrame {
-        let dx = target.x - origin.x
-        let dy = -(target.y - origin.y)  // macOS 座標系: Y 軸下が正 → 反転
-        switch (dx >= 0, dy >= 0) {
-        case (true, false):  return .f02_rightDown
-        case (false, false): return .f03_leftDown
-        case (false, true):  return .f04_leftUp
-        default:             return .f05_rightUp
-        }
+        let screen = NSScreen.screens.first ?? NSScreen.main
+        let screenWidth = screen?.frame.width ?? 1440
+        let screenThresholdX = screenWidth * 0.6
+
+        // 左右判定のみ: 画面左から60%を超えたら右下、それ以外は左下
+        let isRight = target.x >= screenThresholdX
+        return isRight ? .f02_rightDown : .f03_leftDown
     }
 
     private func checkPermission() {
         let trusted = axProvider.isProcessTrusted()
         let didRequest = UserDefaults.standard.bool(forKey: PermissionKeys.didRequestAccessibility)
 
+        let oldStatus = permissionStatus
         if trusted { permissionStatus = .granted }
         else if didRequest { permissionStatus = .denied }
         else { permissionStatus = .notDetermined }
+
+        if permissionStatus != oldStatus {
+            os_log(.default, "👁 Gaze: 権限変化: %{public}@ → %{public}@ (trusted=%d, didRequest=%d)",
+                   String(describing: oldStatus), String(describing: permissionStatus),
+                   trusted ? 1 : 0, didRequest ? 1 : 0)
+        }
     }
 
     /// mode / gazeFrame を更新し、変更があれば onGazeFrameChanged を呼ぶ。
