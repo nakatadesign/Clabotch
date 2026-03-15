@@ -85,6 +85,14 @@ final class CoordinatorBinder {
             // idle/sleeping → bubbleText==nil → 既に dismiss 済みなので何もしない
         }
 
+        // AX 権限変化時のフィードバック
+        gazeController.onPermissionChanged = { [weak self] status in
+            guard let self, status == .granted else { return }
+            if let anchor = self.anchorProvider() {
+                self.ephemeralBubble.show(text: "視線追跡が有効になりました", anchor: anchor, duration: 3.0)
+            }
+        }
+
         stateMachine.onEphemeralDone = { [weak self] elapsedMs in
             guard let self else { return }
             let text = Self.formatElapsedTime(elapsedMs)
