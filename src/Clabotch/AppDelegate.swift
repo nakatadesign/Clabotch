@@ -4,7 +4,7 @@ import os.log
 /// メニューバー常駐アプリの AppDelegate。
 /// HookServer の起動・停止と NSStatusItem の管理を担当する。
 /// Coordinator 役: StateMachine.onPhaseChanged → GazeController / BlinkController / ClabotchEyeView / BubbleWindow の結線。
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var hookServer: HookServer?
     private let deduplicator = EventDeduplicator()
@@ -37,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "設定...", action: #selector(openSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit Clabotch", action: #selector(quitApp), keyEquivalent: "q"))
+        menu.delegate = self
         statusItem?.menu = menu
 
         // GazeController のステータスアイテム中心座標プロバイダ設定
@@ -139,6 +140,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsWindowController = SettingsWindowController(settingsStore: settingsStore, launchAtLogin: launchAtLoginManager)
         }
         settingsWindowController?.showWindow()
+    }
+
+    // MARK: - NSMenuDelegate
+
+    func menuWillOpen(_ menu: NSMenu) {
+        eyeView?.showMenuFace()
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        eyeView?.hideMenuFace()
     }
 
     @objc private func quitApp() {

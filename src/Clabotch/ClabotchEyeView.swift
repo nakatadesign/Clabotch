@@ -184,6 +184,20 @@ final class ClabotchEyeView: NSView {
         advanceBlinkSequence()
     }
 
+    /// メニュー表示中にエラー目（×マーク）を表示する。顔色は変えない。
+    func showMenuFace() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        showErrorX = true
+        needsDisplay = true
+    }
+
+    /// メニュー閉じたらエラー目を解除する。
+    func hideMenuFace() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        showErrorX = false
+        needsDisplay = true
+    }
+
     /// phase に応じた外見を設定する。AppDelegate が onPhaseChanged で呼ぶ。
     func setPhaseAppearance(phase: MascotPhase) {
         dispatchPrecondition(condition: .onQueue(.main))
