@@ -223,7 +223,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
 
         XCTAssertEqual(gazeController.mode, .fixed(.f01_center, reason: .mascotStateOverride))
         XCTAssertFalse(blinkController.isBlinking)
-        XCTAssertTrue(eyeView.isBlinkClosed)
+        XCTAssertTrue(eyeView.showSleepingEyes)
         XCTAssertEqual(eyeView.faceColor, ClabotchEyeView.Palette.faceSleep)
         XCTAssertNil(activeBubbleSpy.lastText)
     }

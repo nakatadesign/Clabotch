@@ -144,17 +144,17 @@ final class ClabotchEyeViewTests: XCTestCase {
         XCTAssertEqual(sut.faceColor, ClabotchEyeView.Palette.faceSleep)
         XCTAssertFalse(sut.showErrorX)
         XCTAssertFalse(sut.showSurprise)
-        XCTAssertEqual(sut.blinkStage, .closed)  // v11 §6: sleeping は frame06（常時閉じ目）
-        XCTAssertTrue(sut.isBlinkClosed)
+        XCTAssertTrue(sut.showSleepingEyes)  // ^_^ 逆V字閉じ目
+        XCTAssertEqual(sut.blinkStage, .open)  // blinkStage は open（sleeping 専用描画を使用）
     }
 
-    func testSleepingToIdleResetsBlinkClosed() {
+    func testSleepingToIdleResetsSleepingEyes() {
         sut.setPhaseAppearance(phase: .sleeping)
-        XCTAssertEqual(sut.blinkStage, .closed)
+        XCTAssertTrue(sut.showSleepingEyes)
 
         sut.setPhaseAppearance(phase: .idle)
+        XCTAssertFalse(sut.showSleepingEyes)
         XCTAssertEqual(sut.blinkStage, .open)
-        XCTAssertFalse(sut.isBlinkClosed)
     }
 
     // MARK: - sleeping が blink reopen タイマーを無効化する
@@ -164,14 +164,14 @@ final class ClabotchEyeViewTests: XCTestCase {
         sut.triggerBlink()
         XCTAssertTrue(sut.isBlinkClosed)
 
-        // 即座に sleeping に遷移 → blinkTimer が無効化される
+        // 即座に sleeping に遷移 → blinkTimer が無効化、showSleepingEyes で描画
         sut.setPhaseAppearance(phase: .sleeping)
-        XCTAssertEqual(sut.blinkStage, .closed)
+        XCTAssertTrue(sut.showSleepingEyes)
 
-        // 500ms 後もまだ閉じたままであること（タイマーが無効化されていれば reopen しない）
-        let exp = expectation(description: "sleeping 中は閉じ目維持")
+        // 500ms 後も sleeping 目のままであること
+        let exp = expectation(description: "sleeping 中は sleeping 目維持")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            XCTAssertEqual(self.sut.blinkStage, .closed, "sleeping 中に blink reopen が発火してはいけない")
+            XCTAssertTrue(self.sut.showSleepingEyes, "sleeping 中に blink reopen が発火してはいけない")
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.5)
@@ -213,9 +213,9 @@ final class ClabotchEyeViewTests: XCTestCase {
         XCTAssertEqual(sut.blinkStage, .closed)
         sut.display()
 
-        // sleeping → closed（直接設定）
+        // sleeping → showSleepingEyes（専用描画）
         sut.setPhaseAppearance(phase: .sleeping)
-        XCTAssertEqual(sut.blinkStage, .closed)
+        XCTAssertTrue(sut.showSleepingEyes)
         sut.display()
 
         // idle → open
@@ -226,13 +226,13 @@ final class ClabotchEyeViewTests: XCTestCase {
 
     // MARK: - frame 06/07/08 描画状態マッピング
 
-    func testFrame06SleepingDrawsClosedEyes() {
-        // frame06: sleeping → isBlinkClosed=true, 目ソケットなし、閉じ目横線
+    func testFrame06SleepingDrawsSleepingEyes() {
+        // sleeping → showSleepingEyes=true, ^_^ 逆V字閉じ目
         sut.setPhaseAppearance(phase: .sleeping)
-        XCTAssertTrue(sut.isBlinkClosed)
+        XCTAssertTrue(sut.showSleepingEyes)
         XCTAssertFalse(sut.showErrorX)
         XCTAssertFalse(sut.showSurprise)
-        sut.display()  // draw() が状態に基づいて正しい分岐に入ることを確認
+        sut.display()
     }
 
     func testFrame07ErrorDrawsXMarks() {
@@ -262,13 +262,15 @@ final class ClabotchEyeViewTests: XCTestCase {
     }
 
     func testDoneAnimationSequenceProgresses() {
-        // アニメーションが進行して左下で停止することを確認
+        // アニメーションが進行して完了後にハッピー目に切り替わることを確認
         sut.setPhaseAppearance(phase: .done(elapsedMs: 3000))
 
-        let exp = expectation(description: "DONE アニメーション完了")
+        let exp = expectation(description: "DONE アニメーション完了 → ハッピー目")
         let totalDuration = ClabotchEyeView.doneAnimInterval * Double(ClabotchEyeView.doneAnimSequence.count)
         DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration + 0.1) {
-            XCTAssertEqual(self.sut.doneAnimPupilFrame, .f03_leftDown)
+            // スピン完了後は doneAnimPupilFrame=nil, showHappyEyes=true
+            XCTAssertNil(self.sut.doneAnimPupilFrame)
+            XCTAssertTrue(self.sut.showHappyEyes)
             exp.fulfill()
         }
         wait(for: [exp], timeout: 3.0)
