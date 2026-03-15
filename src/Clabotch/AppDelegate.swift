@@ -60,6 +60,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         binder?.bind()
 
+        // AX 権限変化 → 設定画面のステータス更新
+        binder?.onAccessibilityStatusChanged = { [weak self] _ in
+            self?.settingsWindowController?.refreshAccessibilityStatus()
+        }
+
         // 設定変更 → StateMachine へ伝播
         settingsStore.onChange = { [weak self] in
             guard let self else { return }

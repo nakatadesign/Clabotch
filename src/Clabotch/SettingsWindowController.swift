@@ -10,7 +10,7 @@ final class SettingsWindowController: NSObject {
     /// ウィンドウ生成ファクトリ。テストでは nil を返してヘッドレス実行する。
     var windowFactory: (_ contentView: NSView) -> NSWindow? = { contentView in
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 200),
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 260),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -32,6 +32,10 @@ final class SettingsWindowController: NSObject {
     private(set) var sleepPopup: NSPopUpButton?
     /// チェックボックス（テスト検証用に公開）
     private(set) var launchAtLoginCheckbox: NSButton?
+    /// AX 権限ステータスラベル（テスト検証用に公開）
+    private(set) var axStatusLabel: NSTextField?
+    /// AX 権限ボタン（テスト検証用に公開）
+    private(set) var axSettingsButton: NSButton?
 
     init(settingsStore: SettingsStore, launchAtLogin: LaunchAtLoginProviding = LaunchAtLoginManager()) {
         self.settingsStore = settingsStore
@@ -71,7 +75,7 @@ final class SettingsWindowController: NSObject {
     // MARK: - UI 構築
 
     private func buildContentView() -> NSView {
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 200))
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 260))
 
         let stack = NSStackView()
         stack.orientation = .vertical
@@ -86,6 +90,15 @@ final class SettingsWindowController: NSObject {
         // スリープタイムアウト行
         let sleepRow = buildSleepTimeoutRow()
         stack.addArrangedSubview(sleepRow)
+
+        // AX 権限セクション（区切り線 + ボタン + ステータス）
+        let separator = NSBox()
+        separator.boxType = .separator
+        stack.addArrangedSubview(separator)
+        separator.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+
+        let axRow = buildAccessibilityRow()
+        stack.addArrangedSubview(axRow)
 
         container.addSubview(stack)
         NSLayoutConstraint.activate([
@@ -140,6 +153,54 @@ final class SettingsWindowController: NSObject {
         checkbox.state = launchAtLogin.isEnabled ? .on : .off
         launchAtLoginCheckbox = checkbox
         return checkbox
+    }
+
+    // MARK: - AX 権限
+
+    private func buildAccessibilityRow() -> NSView {
+        let row = NSStackView()
+        row.orientation = .vertical
+        row.alignment = .leading
+        row.spacing = 6
+
+        // ステータス行
+        let statusRow = NSStackView()
+        statusRow.orientation = .horizontal
+        statusRow.spacing = 6
+
+        let label = NSTextField(labelWithString: "視線追跡:")
+        label.font = .systemFont(ofSize: 13)
+
+        let status = NSTextField(labelWithString: axStatusText())
+        status.font = .systemFont(ofSize: 13)
+        axStatusLabel = status
+
+        statusRow.addArrangedSubview(label)
+        statusRow.addArrangedSubview(status)
+        row.addArrangedSubview(statusRow)
+
+        // ボタン
+        let button = NSButton(title: "アクセシビリティ設定を確認...", target: self, action: #selector(openAccessibilitySettings))
+        button.font = .systemFont(ofSize: 13)
+        button.bezelStyle = .rounded
+        axSettingsButton = button
+        row.addArrangedSubview(button)
+
+        return row
+    }
+
+    private func axStatusText() -> String {
+        AXIsProcessTrusted() ? "✓ 有効" : "未許可"
+    }
+
+    /// AX 権限ステータスを最新状態に更新する。
+    func refreshAccessibilityStatus() {
+        axStatusLabel?.stringValue = axStatusText()
+    }
+
+    @objc private func openAccessibilitySettings() {
+        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+        NSWorkspace.shared.open(url)
     }
 
     @objc private func launchAtLoginChanged(_ sender: NSButton) {

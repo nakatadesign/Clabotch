@@ -11,6 +11,8 @@ final class CoordinatorBinder {
     let activeBubble: BubblePresenting
     let ephemeralBubble: BubblePresenting
     var anchorProvider: () -> CGPoint?
+    /// AX 権限変化時の追加通知（設定画面のステータス更新など）。
+    var onAccessibilityStatusChanged: ((GazePermissionStatus) -> Void)?
 
     init(
         stateMachine: StateMachine,
@@ -87,7 +89,9 @@ final class CoordinatorBinder {
 
         // AX 権限変化時のフィードバック
         gazeController.onPermissionChanged = { [weak self] status in
-            guard let self, status == .granted else { return }
+            guard let self else { return }
+            self.onAccessibilityStatusChanged?(status)
+            guard status == .granted else { return }
             if let anchor = self.anchorProvider() {
                 self.ephemeralBubble.show(text: "視線追跡が有効になりました", anchor: anchor, duration: 3.0)
             }
