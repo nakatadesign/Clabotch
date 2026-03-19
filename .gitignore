@@ -39,8 +39,8 @@ dist/
 !.claude/review-loop/**
 .claude/review-loop/runtime/*
 !.claude/review-loop/runtime/.gitignore
-!.claude/totonoe/
-!.claude/totonoe/**
-.claude/totonoe/runtime/
+!.totonoe/
+!.totonoe/**
+.totonoe/runtime/
 .claude/settings.local.json
 .claude/hooks/

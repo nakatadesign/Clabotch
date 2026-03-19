@@ -9,7 +9,7 @@ source "${BIN_DIR}/common.sh"
 usage() {
   cat <<'EOF'
 Usage:
-  .claude/totonoe/bin/run_codex_audit.sh --job-name <name> [--round <n>] [--dry-run]
+  .totonoe/bin/run_codex_audit.sh --job-name <name> [--round <n>] [--dry-run]
 
 Codex が復活した後に、過去の Gemini 実行結果を添削する。
 --round を省略すると全ラウンドを走査する。

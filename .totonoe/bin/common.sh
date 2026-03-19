@@ -4,8 +4,7 @@ set -euo pipefail
 
 COMMON_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 TOTONOE_DIR="$(CDPATH='' cd -- "${COMMON_DIR}/.." && pwd -P)"
-CLAUDE_DIR="$(CDPATH='' cd -- "${TOTONOE_DIR}/.." && pwd -P)"
-REPO_ROOT="$(CDPATH='' cd -- "${CLAUDE_DIR}/.." && pwd -P)"
+REPO_ROOT="$(CDPATH='' cd -- "${TOTONOE_DIR}/.." && pwd -P)"
 RUNTIME_ROOT="${TOTONOE_DIR}/runtime"
 GOALS_DIR="${TOTONOE_DIR}/goals"
 SCHEMAS_DIR="${TOTONOE_DIR}/schemas"
