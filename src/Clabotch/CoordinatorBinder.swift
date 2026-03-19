@@ -52,8 +52,9 @@ final class CoordinatorBinder {
             let override = Self.gazeOverride(for: phase)
             self.gazeController.setOverride(override)
 
-            // thinking/working 遷移時にターミナル方向へ一時注視
+            // thinking/working/responding 遷移時にターミナル方向へ一時注視（patch_015）
             if case .thinking = phase { self.gazeController.lookAtTerminal() }
+            if case .responding = phase { self.gazeController.lookAtTerminal() }
             if case .working = phase { self.gazeController.lookAtTerminal() }
 
             let blinkEnabled = Self.isBlinkEnabled(for: phase)
@@ -116,17 +117,17 @@ final class CoordinatorBinder {
         }
     }
 
-    // MARK: - Phase → Override 変換（v11 §11.5 対応表準拠）
+    // MARK: - Phase → Override 変換（patch_017 準拠）
 
     static func gazeOverride(for phase: MascotPhase) -> GazeOverride {
         switch phase {
-        case .idle:       return .none  // 常にカーソル追跡
+        case .idle:       return .fixed(frame: .f02_rightDown, reason: .mascotStateOverride, allowsAttentionOverride: true)   // softFixed
         case .thinking:   return .none
         case .responding: return .none
         case .working:    return .none
-        case .done:       return .none  // 常にカーソル追跡
-        case .error:      return .fixed(frame: .f01_center, reason: .mascotStateOverride, allowsAttentionOverride: false)
-        case .sleeping:   return .fixed(frame: .f01_center, reason: .mascotStateOverride, allowsAttentionOverride: false)
+        case .done:       return .fixed(frame: .f02_rightDown, reason: .mascotStateOverride, allowsAttentionOverride: true)   // softFixed
+        case .error:      return .fixed(frame: .f01_center, reason: .mascotStateOverride, allowsAttentionOverride: false)     // hardFixed
+        case .sleeping:   return .fixed(frame: .f01_center, reason: .mascotStateOverride, allowsAttentionOverride: false)     // hardFixed
         }
     }
 

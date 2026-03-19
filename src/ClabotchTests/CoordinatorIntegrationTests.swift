@@ -148,15 +148,20 @@ final class CoordinatorIntegrationTests: XCTestCase {
         }
 
         XCTAssertEqual(eyeView.showSurprise, true)
-        // done でも視線追跡（override=none）
-        // GazeController は AX 権限なしだと permissionNotDetermined で fixed になるが、override 自体は none
-        XCTAssertNotEqual(
+
+        // done は softFixed（patch_017）。polling を止めてから検証し、
+        // attention/supportedBundles による mode 変動を排除する。
+        gazeController.stopPolling()
+        XCTAssertEqual(
             gazeController.mode,
-            .fixed(.f02_rightDown, reason: .mascotStateOverride)
+            .fixed(.f02_rightDown, reason: .mascotStateOverride),
+            "done フェーズの setOverride(softFixed) が正しく適用されるべき"
         )
+
         // §5: DONE 時にジャンプアニメーションがトリガーされる
         XCTAssertTrue(eyeView.isJumping || eyeView.frame.origin.y == 0,
                       "ジャンプがトリガーされているか、既に完了しているべき")
+        gazeController.startPolling()
     }
 
     func testA5SessionDoneZeroMsShowsCompletionOnly() {
@@ -411,12 +416,11 @@ final class CoordinatorIntegrationTests: XCTestCase {
         // GazeController 初期値: .fixed(.f03_leftDown, reason: .terminalNotFound)
         XCTAssertEqual(gc.mode, .fixed(.f03_leftDown, reason: .terminalNotFound))
 
-        // start() → onPhaseChanged(.idle) → setOverride(.none) → 常にカーソル追跡
+        // start() → onPhaseChanged(.idle) → setOverride(softFixed) → f02_rightDown 固定
         sm.start()
 
-        // idle でも override=none なので、GazeController は polling で決まる mode になる
-        // mascotStateOverride ではないことを検証
-        XCTAssertNotEqual(gc.mode, .fixed(.f02_rightDown, reason: .mascotStateOverride))
+        // idle は softFixed（patch_017）: f02_rightDown に固定される
+        XCTAssertEqual(gc.mode, .fixed(.f02_rightDown, reason: .mascotStateOverride))
 
         // startPolling() はまだ呼ばれていない
         gc.startPolling()
@@ -551,5 +555,138 @@ final class CoordinatorIntegrationTests: XCTestCase {
         waitForCondition(description: "thinking with [+1] for done session") {
             self.activeBubbleSpy.lastText == "考えてます... [+1]"
         }
+    }
+
+    // MARK: - J. Responding 統合テスト（patch_015）
+
+    func testJ1RespondingTransitionShowsBubbleAndBlink() {
+        // 独立したフィクスチャで検証（setUp の live timer/polling と干渉しない）
+        let localAX = MockAXProvider()
+        let localWS = MockWorkspaceProvider()
+        let localGC = GazeController(
+            axProvider: localAX,
+            workspaceProvider: localWS,
+            pollInterval: 1, // polling は使わない
+            pollIntervalNotGranted: 1
+        )
+        let localBC = BlinkController(intervalRange: 100...200, randomSource: { 0.0 })
+        let localEyeView = ClabotchEyeView(frame: NSRect(x: 0, y: 0, width: 22, height: 14))
+        let fastSM = StateMachine(
+            sleepThreshold: 300,
+            errorAutoTransitionDelay: 2.5,
+            doneAutoTransitionDelay: 4.0,
+            respondingTransitionDelay: 0.05
+        )
+        let fastBubble = BubbleSpy()
+        let fastBinder = CoordinatorBinder(
+            stateMachine: fastSM,
+            gazeController: localGC,
+            blinkController: localBC,
+            eyeView: localEyeView,
+            activeBubble: fastBubble,
+            ephemeralBubble: BubbleSpy(),
+            anchorProvider: { CGPoint(x: 100, y: 100) }
+        )
+        fastBinder.bind()
+        fastSM.start()
+
+        // session_start → tool_start → tool_end(success)
+        fastSM.handle(event: .sessionStart(sessionID: "r1"))
+        fastSM.handle(event: .toolStart(sessionID: "r1", toolName: "Bash"))
+        fastSM.handle(event: .toolEnd(sessionID: "r1", toolName: "Bash", durationMs: 100, isError: false, errorMessage: nil))
+
+        // tool_end 直後は thinking
+        XCTAssertEqual(fastSM.displayPhase, .thinking)
+
+        // 0.05s 後に responding に遷移
+        waitForCondition(description: "responding 遷移") {
+            fastSM.displayPhase == .responding
+        }
+
+        // 吹き出しが「返答中...」に切り替わっている
+        XCTAssertEqual(fastBubble.lastText, "返答中...")
+
+        // 実際の BlinkController の状態を検証（bind 経由の fan-out）
+        XCTAssertTrue(localBC.isBlinking, "responding 時は blink が有効であるべき")
+
+        // gazeOverride は .none（thinking/working と同様）
+        XCTAssertEqual(CoordinatorBinder.gazeOverride(for: .responding), .none)
+
+        // クリーンアップ
+        localBC.setBlinking(enabled: false)
+        fastSM.handle(event: .sessionDone(sessionID: "r1", elapsedMs: 0))
+    }
+
+    func testJ2RespondingRefreshesAttention() {
+        // responding 遷移時に lookAtTerminal() が呼ばれ、attention が延長されることを検証。
+        // 検証手順:
+        //   1. tool_end を t0 で実行 → thinking の lookAtTerminal() → 期限 = t0 + 0.3
+        //   2. currentTime を t0 + 0.25 に進める
+        //   3. responding 遷移を待つ（遷移時の currentTime = t0 + 0.25）
+        //   4. responding の lookAtTerminal() → 期限 = (t0+0.25) + 0.3 = t0 + 0.55
+        //   5. currentTime を t0 + 0.35 に進める
+        //      - responding で lookAtTerminal() あり: 期限 t0+0.55 > t0+0.35 → active ✓
+        //      - responding で lookAtTerminal() なし: 期限 t0+0.3 < t0+0.35 → expired ✗
+        var currentTime = Date()
+        let t0 = currentTime
+        let gc = GazeController(
+            axProvider: mockAX,
+            workspaceProvider: mockWorkspace,
+            pollInterval: 0.05,
+            pollIntervalNotGranted: 0.05,
+            attentionDuration: 0.3,
+            now: { currentTime }
+        )
+        gc.statusItemCenterProvider = { CGPoint(x: 500, y: 300) }
+
+        mockAX.isTrusted = true
+        mockWorkspace.bundleIdentifier = "com.apple.Terminal"
+        mockWorkspace.pid = 1234
+        mockAX.terminalCenter = CGPoint(x: 500, y: 400)
+
+        let fastSM = StateMachine(
+            sleepThreshold: 300,
+            errorAutoTransitionDelay: 2.5,
+            doneAutoTransitionDelay: 4.0,
+            respondingTransitionDelay: 0.05
+        )
+        let fastBubble = BubbleSpy()
+        let testBinder = CoordinatorBinder(
+            stateMachine: fastSM,
+            gazeController: gc,
+            blinkController: blinkController,
+            eyeView: eyeView,
+            activeBubble: fastBubble,
+            ephemeralBubble: ephemeralBubbleSpy,
+            anchorProvider: { CGPoint(x: 100, y: 100) }
+        )
+        testBinder.bind()
+        fastSM.start()
+        // startPolling() を呼ばない → poll 起因の attention を除外
+
+        // session_start, tool_start
+        fastSM.handle(event: .sessionStart(sessionID: "r2"))
+        fastSM.handle(event: .toolStart(sessionID: "r2", toolName: "Bash"))
+
+        // tool_end を t0 で実行 → thinking の lookAtTerminal() → 期限 = t0 + 0.3
+        fastSM.handle(event: .toolEnd(sessionID: "r2", toolName: "Bash", durationMs: 100, isError: false, errorMessage: nil))
+
+        // 時刻を t0 + 0.25 に進める（thinking の期限まで残り 0.05s）
+        currentTime = t0.addingTimeInterval(0.25)
+
+        // responding 遷移を待つ（実時間 0.05s 後に発火、その時 currentTime = t0+0.25）
+        // responding の lookAtTerminal() → 期限 = (t0+0.25) + 0.3 = t0 + 0.55
+        waitForCondition(description: "responding 遷移") {
+            fastSM.displayPhase == .responding
+        }
+
+        // thinking の期限(t0+0.3)を超え、responding の期限(t0+0.55)内の時刻に進める
+        currentTime = t0.addingTimeInterval(0.35)
+        XCTAssertTrue(gc.isAttentionActive,
+            "responding 遷移で lookAtTerminal() が呼ばれ attention がリフレッシュされるべき。"
+            + "thinking の期限(t0+0.3)は切れたが、responding の期限(t0+0.55)はまだ有効")
+
+        // クリーンアップ
+        fastSM.handle(event: .sessionDone(sessionID: "r2", elapsedMs: 0))
     }
 }

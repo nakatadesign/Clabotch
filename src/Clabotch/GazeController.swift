@@ -187,7 +187,7 @@ final class GazeController {
     }
 
     private func update() {
-        // アプリ切替検出は常に実行（override/permission チェック前）
+        // ① アプリ切替検出は常に実行（override/permission チェック前）
         let currentBundle = workspaceProvider.frontmostBundleIdentifier()
         if currentBundle != lastFrontmostBundle {
             lastFrontmostBundle = currentBundle
@@ -197,17 +197,31 @@ final class GazeController {
             }
         }
 
-        // stateOverride チェック
-        // allowsAttentionOverride=false（error/sleeping）は常に最優先
+        // ② 権限チェックは常に実行（AXIsProcessTrusted は軽量、ポーリング間隔調整にも必要）
+        checkPermission()
+
+        // ③ hardFixed チェック（error/sleeping: allowsAttentionOverride=false）
         if case .fixed(let frame, let reason, let allowsAttention) = stateOverride {
             if !allowsAttention {
                 applyGaze(.fixed(frame, reason: reason), frame: frame)
                 return
             }
-            // allowsAttentionOverride=true の場合は常にバイパス（attention 不要）
+
+            // ④ softFixed（idle/done: allowsAttentionOverride=true）
+            // attention が有効な場合のみバイパスして追跡を試みる
+            if !isAttentionActive {
+                applyGaze(.fixed(frame, reason: reason), frame: frame)
+                return
+            }
         }
 
-        checkPermission()
+        // ⑤ override なし + attention 無効 → neutral position
+        if stateOverride == .none && !isAttentionActive {
+            applyGaze(.fixed(.f01_center, reason: .attentionNeutral), frame: .f01_center)
+            return
+        }
+
+        // ── ここから先は attention 有効時のみ到達 ──
 
         guard permissionStatus == .granted else {
             os_log(.default, "👁 Gaze: 権限なし → f03_leftDown")
@@ -215,7 +229,13 @@ final class GazeController {
             return
         }
 
-        // ① AX でウィンドウ位置取得
+        // ⑥ supportedBundles チェック: 非ターミナルでは AX を呼ばない
+        guard let bundle = currentBundle, supportedBundles.contains(bundle) else {
+            applyGaze(.fixed(.f01_center, reason: .attentionNeutral), frame: .f01_center)
+            return
+        }
+
+        // ⑥ AX でウィンドウ位置取得
         guard
             let pid = workspaceProvider.frontmostPID(),
             let origin = statusItemCenterProvider?()
@@ -227,7 +247,7 @@ final class GazeController {
             return
         }
 
-        // ② 量子化
+        // ⑦ 量子化
         if let target = center {
             let frame = quantize(from: origin, to: target)
             os_log(.default, "👁 Gaze: origin=(%.0f,%.0f) target=(%.0f,%.0f) dx=%.0f dy=%.0f → %{public}@",

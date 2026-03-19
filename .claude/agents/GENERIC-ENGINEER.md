@@ -43,7 +43,7 @@ cd src && xcodegen generate && xcodebuild test \
 ## 完了時の必須作業
 
 1. runtime 配下に summary markdown を保存する
-2. `.claude/totonoe/bin/record_claude_round.sh` を実行する
-3. `.claude/totonoe/bin/run_reviewer.sh` を実行する
-4. `.claude/totonoe/bin/run_judge.sh` を実行する
+2. `.totonoe/bin/record_claude_round.sh` を実行する
+3. `.totonoe/bin/run_reviewer.sh` を実行する
+4. `.totonoe/bin/run_judge.sh` を実行する
 5. `manager_review` になったら Manager に引き継ぐ

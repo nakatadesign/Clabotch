@@ -38,14 +38,13 @@ final class GazeControllerOverrideTests: XCTestCase {
         sut.setOverride(.fixed(frame: .f01_center, reason: .mascotStateOverride))
         sut.setOverride(.none)
 
-        // AX 権限なし → update() で permissionNotGranted に再計算される
+        // override=none + attention 無効 → attentionNeutral (f01_center)
         sut.startPolling()
 
         let exp = expectation(description: "poll が発火して再計算される")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            // override が none なので update() が走り、permission に基づく値になる
-            XCTAssertEqual(self.sut.gazeFrame, .f03_leftDown)
-            XCTAssertEqual(self.sut.mode, .fixed(.f03_leftDown, reason: .permissionNotGranted))
+            XCTAssertEqual(self.sut.gazeFrame, .f01_center)
+            XCTAssertEqual(self.sut.mode, .fixed(.f01_center, reason: .attentionNeutral))
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)
@@ -139,14 +138,15 @@ final class GazeControllerPermissionTests: XCTestCase {
         wait(for: [exp], timeout: 1.0)
     }
 
-    func testPermissionNotGrantedFixedGaze() {
+    func testPermissionNotGrantedWithoutAttention() {
+        // attention 無効 + override なし → attentionNeutral（権限チェックより前に return）
         mockAX.isTrusted = false
 
         sut.startPolling()
         let exp = expectation(description: "poll 発火")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertEqual(self.sut.mode, .fixed(.f03_leftDown, reason: .permissionNotGranted))
-            XCTAssertEqual(self.sut.gazeFrame, .f03_leftDown)
+            XCTAssertEqual(self.sut.mode, .fixed(.f01_center, reason: .attentionNeutral))
+            XCTAssertEqual(self.sut.gazeFrame, .f01_center)
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)
@@ -239,30 +239,31 @@ final class GazeControllerTerminalTests: XCTestCase {
         wait(for: [exp], timeout: 1.0)
     }
 
-    func testNoFrontAppNoTracking() {
+    func testNoFrontAppNeutral() {
+        // フロントアプリなし + attention 無効 → attentionNeutral
         mockWorkspace.bundleIdentifier = nil
         mockWorkspace.pid = nil
 
         sut.startPolling()
-        let exp = expectation(description: "no front app — no tracking change")
+        let exp = expectation(description: "no front app → attentionNeutral")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            // frontmostPID が nil なので update() は early return → 初期値のまま
-            XCTAssertEqual(self.sut.gazeFrame, .f03_leftDown)
+            XCTAssertEqual(self.sut.gazeFrame, .f01_center)
+            XCTAssertEqual(self.sut.mode, .fixed(.f01_center, reason: .attentionNeutral))
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)
     }
 
-    func testNonTerminalAppTracksViaAX() {
+    func testNonTerminalDoesNotTrack() {
+        // supportedBundles 以外では AX を呼ばない（patch_013/017）
         mockWorkspace.bundleIdentifier = "com.apple.Safari"
         mockWorkspace.pid = 1234
         mockAX.terminalCenter = CGPoint(x: 500, y: 500)
 
         sut.startPolling()
-        let exp = expectation(description: "non-terminal app still tracks via AX")
+        let exp = expectation(description: "non-terminal → attentionNeutral")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            // 常時追跡なので AX 経由でウィンドウ位置を取得
-            XCTAssertEqual(self.sut.mode, .tracking)
+            XCTAssertEqual(self.sut.mode, .fixed(.f01_center, reason: .attentionNeutral))
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)
@@ -545,7 +546,8 @@ final class GazeControllerAttentionTests: XCTestCase {
         XCTAssertEqual(sut.mode, .tracking)
     }
 
-    func testTrackingContinuesAfterTimeElapsed() {
+    func testAttentionExpiredReturnsToNeutral() {
+        // attention 切れ → attentionNeutral に戻る（patch_013/017）
         mockWorkspace.bundleIdentifier = "com.apple.Terminal"
         mockWorkspace.pid = 1234
         mockAX.terminalCenter = CGPoint(x: 500, y: 400)
@@ -553,37 +555,38 @@ final class GazeControllerAttentionTests: XCTestCase {
         sut.lookAtTerminal()
         XCTAssertEqual(sut.mode, .tracking)
 
-        // 時間経過しても常時追跡が維持される
+        // attention 期限切れ
         currentTime = currentTime.addingTimeInterval(10.0)
         sut.startPolling()
 
-        let exp = expectation(description: "still tracking after time elapsed")
+        let exp = expectation(description: "neutral after attention expired")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertEqual(self.sut.mode, .tracking)
+            XCTAssertEqual(self.sut.mode, .fixed(.f01_center, reason: .attentionNeutral))
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)
     }
 
-    func testAppSwitchUpdatesTracking() {
+    func testAppSwitchToTerminalStartsAttention() {
+        // Safari（非ターミナル）→ Terminal（対応ターミナル）切替で attention 開始
         mockWorkspace.bundleIdentifier = "com.apple.Safari"
         mockWorkspace.pid = 1234
         mockAX.terminalCenter = CGPoint(x: 500, y: 400)
 
         sut.startPolling()
 
-        let exp1 = expectation(description: "initial tracking with Safari")
+        let exp1 = expectation(description: "Safari → attentionNeutral")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            // Safari でも AX 経由で追跡
-            XCTAssertEqual(self.sut.mode, .tracking)
+            // Safari は supportedBundles 外 → attentionNeutral
+            XCTAssertEqual(self.sut.mode, .fixed(.f01_center, reason: .attentionNeutral))
 
-            // ターミナルに切り替え
+            // ターミナルに切り替え → アプリ切替検出で attention 開始
             self.mockWorkspace.bundleIdentifier = "com.apple.Terminal"
             exp1.fulfill()
         }
         wait(for: [exp1], timeout: 1.0)
 
-        let exp2 = expectation(description: "tracking continues after app switch")
+        let exp2 = expectation(description: "Terminal → tracking")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             XCTAssertEqual(self.sut.mode, .tracking)
             exp2.fulfill()
@@ -633,27 +636,29 @@ final class GazeControllerAttentionTests: XCTestCase {
         XCTAssertTrue(sut.isAttentionActive)
     }
 
-    func testTrackingPersistsWithTerminalFrontmost() {
-        // ターミナルがフロントの場合、常時追跡が維持される
+    func testTerminalFrontmostNeutralAfterAttentionExpiry() {
+        // ターミナルフロント + attention 切れ → neutral に戻る
+        // アプリ切替は初回のみ attention を開始し、以降は再開しない
         mockWorkspace.bundleIdentifier = "com.apple.Terminal"
         mockWorkspace.pid = 1234
         mockAX.terminalCenter = CGPoint(x: 500, y: 400)
 
         sut.startPolling()
 
-        let exp1 = expectation(description: "initial tracking")
+        let exp1 = expectation(description: "initial tracking via app switch attention")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            // 初回アプリ切替で attention 開始 → tracking
             XCTAssertEqual(self.sut.mode, .tracking)
             exp1.fulfill()
         }
         wait(for: [exp1], timeout: 1.0)
 
-        // 長時間経過しても tracking が維持される
+        // attention 期限切れ（attentionDuration=0.3s を大幅に超過）
         currentTime = currentTime.addingTimeInterval(30.0)
 
-        let exp2 = expectation(description: "still tracking after long time")
+        let exp2 = expectation(description: "neutral after attention expired")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertEqual(self.sut.mode, .tracking)
+            XCTAssertEqual(self.sut.mode, .fixed(.f01_center, reason: .attentionNeutral))
             exp2.fulfill()
         }
         wait(for: [exp2], timeout: 1.0)
@@ -700,20 +705,21 @@ final class GazeControllerAttentionTests: XCTestCase {
         XCTAssertEqual(sut.mode, .fixed(.f01_center, reason: .mascotStateOverride))
     }
 
-    func testAllowsAttentionOverrideAlwaysBypassed() {
-        // allowsAttentionOverride=true の override は常にバイパスされ追跡が維持される
+    func testSoftFixedAppliedWhenNoAttention() {
+        // softFixed（allowsAttentionOverride=true）+ attention なし → softFixed が適用される
         sut.setOverride(.fixed(frame: .f02_rightDown, reason: .mascotStateOverride, allowsAttentionOverride: true))
 
-        mockWorkspace.bundleIdentifier = "com.apple.Terminal"
+        // 非ターミナルをフロントにする（アプリ切替検出で attention が開始されないようにする）
+        mockWorkspace.bundleIdentifier = "com.apple.Safari"
         mockWorkspace.pid = 1234
-        mockAX.terminalCenter = CGPoint(x: 500, y: 400)
 
         sut.startPolling()
 
-        let exp = expectation(description: "tracking despite override")
+        let exp = expectation(description: "softFixed applied without attention")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            // allowsAttentionOverride=true なので常にバイパス → tracking
-            XCTAssertEqual(self.sut.mode, .tracking)
+            // attention がないので softFixed がそのまま適用される
+            XCTAssertEqual(self.sut.mode, .fixed(.f02_rightDown, reason: .mascotStateOverride))
+            XCTAssertEqual(self.sut.gazeFrame, .f02_rightDown)
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)
@@ -770,26 +776,27 @@ final class GazeControllerClickTests: XCTestCase {
         XCTAssertFalse(mockEventMonitor.isMonitoring)
     }
 
-    func testAlwaysTracksWhenPermissionGranted() {
+    func testTracksDuringAttentionThenNeutral() {
+        // attention 有効中は tracking、切れたら neutral に戻る
         mockWorkspace.bundleIdentifier = "com.apple.Terminal"
         mockWorkspace.pid = 1234
         mockAX.terminalCenter = CGPoint(x: 500, y: 400)
 
         sut.startPolling()
 
-        // 常時追跡: attention 不要で即座に tracking
-        let exp1 = expectation(description: "always tracking")
+        // 初回アプリ切替で attention 開始 → tracking
+        let exp1 = expectation(description: "tracking during attention")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             XCTAssertEqual(self.sut.mode, .tracking)
             exp1.fulfill()
         }
         wait(for: [exp1], timeout: 1.0)
 
-        // 時間が経過しても tracking が維持される
+        // attention 期限切れ → neutral
         currentTime = currentTime.addingTimeInterval(10.0)
-        let exp2 = expectation(description: "still tracking after time")
+        let exp2 = expectation(description: "neutral after attention expired")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertEqual(self.sut.mode, .tracking)
+            XCTAssertEqual(self.sut.mode, .fixed(.f01_center, reason: .attentionNeutral))
             exp2.fulfill()
         }
         wait(for: [exp2], timeout: 1.0)

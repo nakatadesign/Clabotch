@@ -24,9 +24,10 @@ final class AppDelegateCoordinatorTests: XCTestCase {
 
     // MARK: - gazeOverride(for:)
 
-    func testGazeOverrideForIdleNone() {
+    func testGazeOverrideForIdleSoftFixed() {
+        // patch_017: idle は softFixed（allowsAttentionOverride=true）
         let override = CoordinatorBinder.gazeOverride(for: .idle)
-        XCTAssertEqual(override, .none)
+        XCTAssertEqual(override, .fixed(frame: .f02_rightDown, reason: .mascotStateOverride, allowsAttentionOverride: true))
     }
 
     func testGazeOverrideForThinkingNone() {
@@ -39,14 +40,16 @@ final class AppDelegateCoordinatorTests: XCTestCase {
         XCTAssertEqual(override, .none)
     }
 
-    func testGazeOverrideForDoneNone() {
+    func testGazeOverrideForDoneSoftFixed() {
+        // patch_017: done は softFixed（allowsAttentionOverride=true）
         let override = CoordinatorBinder.gazeOverride(for: .done(elapsedMs: 1000))
-        XCTAssertEqual(override, .none)
+        XCTAssertEqual(override, .fixed(frame: .f02_rightDown, reason: .mascotStateOverride, allowsAttentionOverride: true))
     }
 
-    func testGazeOverrideForErrorFixed() {
+    func testGazeOverrideForErrorHardFixed() {
+        // patch_017: error は hardFixed（allowsAttentionOverride=false）
         let override = CoordinatorBinder.gazeOverride(for: .error(toolName: "test", message: "err"))
-        XCTAssertEqual(override, .fixed(frame: .f01_center, reason: .mascotStateOverride))
+        XCTAssertEqual(override, .fixed(frame: .f01_center, reason: .mascotStateOverride, allowsAttentionOverride: false))
     }
 
     func testGazeOverrideForRespondingNone() {
@@ -54,9 +57,10 @@ final class AppDelegateCoordinatorTests: XCTestCase {
         XCTAssertEqual(override, .none)
     }
 
-    func testGazeOverrideForSleepingFixed() {
+    func testGazeOverrideForSleepingHardFixed() {
+        // patch_017: sleeping は hardFixed（allowsAttentionOverride=false）
         let override = CoordinatorBinder.gazeOverride(for: .sleeping)
-        XCTAssertEqual(override, .fixed(frame: .f01_center, reason: .mascotStateOverride))
+        XCTAssertEqual(override, .fixed(frame: .f01_center, reason: .mascotStateOverride, allowsAttentionOverride: false))
     }
 
     // MARK: - isBlinkEnabled(for:)
