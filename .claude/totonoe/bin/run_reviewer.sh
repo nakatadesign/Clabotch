@@ -70,16 +70,27 @@ build_prompt_file() {
     printf '## Review Batch\n\n'
     printf 'Batch: %s\n\n' "${batch_label}"
     for file_path in "${batch_files[@]}"; do
-      absolute_path="${REPO_ROOT}/${file_path}"
+      local snapshot_path="${round_path}/snapshot/${file_path}"
       printf '### File: %s\n\n' "${file_path}"
-      if [ -f "${absolute_path}" ]; then
+      if [ -f "${snapshot_path}" ]; then
         printf '```text\n'
-        cat -- "${absolute_path}"
+        safe_read "${snapshot_path}"
         printf '\n```\n\n'
       else
-        printf '_This file is not present in the current working tree. Treat it as deleted or moved._\n\n'
+        printf '_This file is not present in the snapshot. Treat it as deleted or moved._\n\n'
       fi
     done
+    # 過去の未解決指摘の注入（knowledge 有効時のみ）
+    local past_findings=""
+    if should_write_knowledge "${job_name}" 2>/dev/null \
+       && past_findings=$("${BIN_DIR}/query_knowledge.sh" --type findings --limit 3 --max-chars 800 2>/dev/null); then
+      printf '## 過去の未解決指摘（参考情報）\n\n'
+      printf '%s\n\n' "${past_findings}"
+      printf '重要: 上記は参考情報にすぎません。今回のコードスナップショットのみに基づいて独立にレビューしてください。\n'
+      printf '過去の指摘が修正済みであっても改めて報告しないでください。\n'
+      printf '過去にない新しい問題を見逃さないことを優先してください。\n\n'
+    fi
+
     printf '## Output Rules\n\n'
     printf -- '- `severity` must be one of `critical`, `high`, `medium`, `low`\n'
     printf -- '- `overall_grade` must be one of `S`, `A`, `B`, `C`\n'
@@ -123,6 +134,7 @@ run_shadow_reviewer() {
   rm -f "${shadow_tmp}"
 }
 
+# reviewer_shadow_status.json を round ディレクトリに書き出す
 write_shadow_status() {
   local round_path="$1"
   shift
@@ -218,6 +230,80 @@ build_shadow_summary() {
     ' | safe_write "${round_path}/reviewer_shadow_summary.json"
 }
 
+write_knowledge_reviewer() {
+  local job_name="$1"
+  local round="$2"
+  local aggregate_file="$3"
+
+  should_write_knowledge "${job_name}" || return 0
+
+  local grade
+  grade="$(jq -r '.overall_grade' "${aggregate_file}")"
+
+  # 保存対象かどうかを判定する
+  local should_insert=1
+
+  # グレード C は常に保存しない
+  if [ "${grade}" = "C" ]; then
+    should_insert=0
+  fi
+
+  # 段階的品質フィルタ
+  if [ "${should_insert}" = "1" ]; then
+    local threshold current_count
+    threshold="$(read_knowledge_threshold)"
+    current_count="$(_kdb_exec "SELECT COUNT(*) FROM review_rounds;")"
+
+    if [ "${current_count}" -ge "${threshold}" ]; then
+      # 通常フェーズ: S/A のみ
+      case "${grade}" in
+        S|A) ;;
+        *) should_insert=0 ;;
+      esac
+    fi
+    # 初期蓄積フェーズ: S/A/B OK（C は上でフィルタ済み）
+  fi
+
+  if [ "${should_insert}" = "1" ]; then
+    # jq で DELETE + INSERT の SQL を生成する（\u0027 = シングルクォート）
+    local sql
+    sql="$(jq -r \
+      --arg jn "${job_name}" \
+      --argjson rn "${round}" \
+      '
+        def sq: gsub("\u0027"; "\u0027\u0027");
+        def qs: "\u0027" + (. | tostring | sq) + "\u0027";
+
+        "BEGIN;",
+        "DELETE FROM review_rounds WHERE job_name = " + ($jn | qs) + " AND round = " + ($rn | tostring) + ";",
+        "INSERT INTO review_rounds (job_name, round, overall_grade, critical_count, summary) VALUES ("
+          + ($jn | qs) + ", "
+          + ($rn | tostring) + ", "
+          + (.overall_grade | qs) + ", "
+          + (.critical_count | tostring) + ", "
+          + (.summary | qs) + ");",
+        (.findings[]? |
+          "INSERT INTO review_findings (review_round_id, job_name, round, file, severity, title, reason, suggested_fix) VALUES ("
+            + "(SELECT id FROM review_rounds WHERE job_name = " + ($jn | qs) + " AND round = " + ($rn | tostring) + "), "
+            + ($jn | qs) + ", "
+            + ($rn | tostring) + ", "
+            + (.file | qs) + ", "
+            + (.severity | qs) + ", "
+            + (.title | qs) + ", "
+            + (.reason | qs) + ", "
+            + (.suggested_fix | qs) + ");"
+        ),
+        "COMMIT;"
+      ' "${aggregate_file}")"
+    _kdb_exec "${sql}"
+  else
+    # 保存対象外: 既存行があれば削除する（--force 再実行で古い行が残らないようにする）
+    local q_jn
+    q_jn="$(_sql_quote "${job_name}")"
+    _kdb_exec "DELETE FROM review_rounds WHERE job_name = ${q_jn} AND round = ${round};"
+  fi
+}
+
 main() {
   require_cmd jq
 
@@ -246,6 +332,13 @@ main() {
 
   validate_job_name "${job_name}"
   ensure_job_exists "${job_name}"
+
+  acquire_runner_lock "${job_name}" "reviewer"
+  _reviewer_cleanup() {
+    release_runner_lock
+    release_job_lock
+  }
+  trap _reviewer_cleanup EXIT
 
   local state_file state_json status current_round target_round round_path changed_file_list
   state_file="$(state_path "${job_name}")"
@@ -276,6 +369,7 @@ main() {
       findings: []
     }' | safe_write "${round_path}/reviewer_aggregate.json"
 
+    # shadow mode で変更ファイルがない場合も status を記録する
     local reviewer_mode_empty
     reviewer_mode_empty="$(read_reviewer_mode)"
     if [ "${reviewer_mode_empty}" = "shadow" ]; then
@@ -323,10 +417,12 @@ main() {
 
       # shadow 実行（shadow mode のときのみ）
       if [ "${reviewer_mode}" = "shadow" ]; then
+        # primary が実際に使った provider を確認する
         local actual_provider
         actual_provider="$(read_provider_state "${job_name}" | jq -r '.last_used_provider')"
 
         if [ "${actual_provider}" = "gemini" ]; then
+          # primary が Gemini を使った batch では shadow 比較価値が低いためスキップする
           shadow_status_entries+=("$(jq -nc --arg b "${batch_label}" '{batch: $b, status: "skipped", reason: "primary_used_gemini_fallback"}')")
           warn "shadow skipped for batch ${batch_label}: primary used gemini"
         else
@@ -384,8 +480,10 @@ main() {
   aggregate_critical="$(printf '%s\n' "${aggregate_json}" | jq -r '.critical_count')"
   batch_count="$(find "${round_path}" -maxdepth 1 -type f -name 'reviewer_batch_*.json' ! -name '*_shadow.json' | wc -l | tr -d ' ')"
 
+  # knowledge DB への書き込み（state 遷移前に実行する）
+  write_knowledge_reviewer "${job_name}" "${target_round}" "${round_path}/reviewer_aggregate.json"
+
   acquire_job_lock "${job_name}"
-  trap release_job_lock EXIT
 
   state_json="$(safe_read "${state_file}")"
   status="$(printf '%s\n' "${state_json}" | jq -r '.status')"
@@ -428,7 +526,6 @@ main() {
       }')"
 
   release_job_lock
-  trap - EXIT
 
   printf 'reviewer completed for job %s round %03d\n' "${job_name}" "${target_round}"
 }

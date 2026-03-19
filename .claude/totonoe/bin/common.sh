@@ -325,6 +325,7 @@ acquire_job_lock() {
   JOB_LOCK_MODE="mkdir"
   local attempts=0
   while ! mkdir "${JOB_LOCK_DIR}" 2>/dev/null; do
+    # stale lock の回収を試みる
     if _try_reclaim_stale_lock "${JOB_LOCK_DIR}"; then
       continue
     fi
@@ -332,9 +333,12 @@ acquire_job_lock() {
     [ "${attempts}" -lt 300 ] || die "timed out acquiring lock"
     sleep 0.1
   done
+  # lock 取得成功: owner metadata を書き込む
   _write_lock_metadata "${JOB_LOCK_DIR}"
 }
 
+# lock dir 内に owner metadata を保存する
+# 書き込みに失敗した場合は lock dir を削除して die する
 _write_lock_metadata() {
   local lock_dir="$1"
   local meta_file="${lock_dir}/owner.json"
@@ -349,6 +353,7 @@ _write_lock_metadata() {
   fi
 }
 
+# lock dir の経過秒数を返す
 _lock_dir_age_seconds() {
   local lock_dir="$1"
   local mtime now_epoch
@@ -357,6 +362,7 @@ _lock_dir_age_seconds() {
   elif mtime="$(stat -c '%Y' "${lock_dir}" 2>/dev/null)"; then
     :
   else
+    # mtime が取れない場合は安全側に倒して新しいとみなす
     printf '0\n'
     return
   fi
@@ -364,14 +370,18 @@ _lock_dir_age_seconds() {
   printf '%s\n' "$(( now_epoch - mtime ))"
 }
 
+# metadata なし / 壊れた metadata の lock を安全に回収できるか判定する
+# grace period（秒）以内なら owner がまだ metadata を書き込み中と判断して回収しない
 _LOCK_GRACE_SECONDS=5
 
+# stale lock を検出して回収する。回収できたら 0、できなかったら 1 を返す
 _try_reclaim_stale_lock() {
   local lock_dir="$1"
   [ -d "${lock_dir}" ] || return 1
 
   local meta_file="${lock_dir}/owner.json"
   if [ ! -f "${meta_file}" ]; then
+    # metadata がない場合、grace period 内なら owner が書き込み中の可能性がある
     local age
     age="$(_lock_dir_age_seconds "${lock_dir}")"
     if [ "${age}" -lt "${_LOCK_GRACE_SECONDS}" ]; then
@@ -385,6 +395,7 @@ _try_reclaim_stale_lock() {
   local owner_pid
   owner_pid="$(jq -r '.pid // empty' "${meta_file}" 2>/dev/null)" || true
   if [ -z "${owner_pid}" ]; then
+    # metadata が壊れている場合も grace period を確認する
     local age
     age="$(_lock_dir_age_seconds "${lock_dir}")"
     if [ "${age}" -lt "${_LOCK_GRACE_SECONDS}" ]; then
@@ -395,10 +406,13 @@ _try_reclaim_stale_lock() {
     return 0
   fi
 
+  # owner PID が生きているか確認する
   if kill -0 "${owner_pid}" 2>/dev/null; then
+    # PID は生きている。lock を奪わない
     return 1
   fi
 
+  # owner PID が存在しない stale lock を回収する
   warn "stale lock detected (pid ${owner_pid} is dead): ${lock_dir}"
   rm -rf "${lock_dir}" 2>/dev/null || return 1
   return 0
@@ -430,6 +444,126 @@ read_reviewer_mode() {
   esac
 }
 
+
+# --- knowledge DB ヘルパー ---
+
+KNOWLEDGE_DB="${TOTONOE_DIR}/knowledge.db"
+
+# knowledge.quality_threshold_count を config.json から読む（デフォルト 20）
+# 不正値の場合は warn を出してデフォルトにフォールバックする
+read_knowledge_threshold() {
+  local config_path val
+  config_path="$(totonoe_config_path)"
+  if [ -f "${config_path}" ]; then
+    val="$(jq -r '.knowledge.quality_threshold_count // 20' "${config_path}")"
+  else
+    val="20"
+  fi
+  if ! [[ "${val}" =~ ^[0-9]+$ ]] || [ "${val}" -lt 1 ]; then
+    warn "knowledge.quality_threshold_count の値が不正です: '${val}'（デフォルト 20 を使用）"
+    val="20"
+  fi
+  printf '%s\n' "${val}"
+}
+
+# state.json の knowledge_enabled を確認する
+is_knowledge_enabled() {
+  local job_name="$1"
+  local sf
+  sf="$(state_path "${job_name}")"
+  [ -f "${sf}" ] || return 1
+  local enabled
+  enabled="$(jq -r '.knowledge_enabled // false' "${sf}")"
+  [ "${enabled}" = "true" ]
+}
+
+# knowledge.db が存在し knowledge_enabled な場合のみ true を返す
+should_write_knowledge() {
+  local job_name="$1"
+  is_knowledge_enabled "${job_name}" || return 1
+  [ -f "${KNOWLEDGE_DB}" ] || return 1
+}
+
+# SQL 文字列リテラルをエスケープする（シングルクォートを二重化）
+_sql_quote() {
+  printf "'%s'" "${1//\'/\'\'}"
+}
+
+# knowledge.db に対して SQL を実行する（foreign_keys = ON）
+_kdb_exec() {
+  sqlite3 "${KNOWLEDGE_DB}" "PRAGMA foreign_keys = ON; $1"
+}
+
+# --- runner lock ---
+
+RUNNER_LOCK_MODE=""
+RUNNER_LOCK_FD=""
+RUNNER_LOCK_DIR=""
+
+runner_lock_path() {
+  local job_name="$1"
+  local role="$2"
+  printf '%s/%s.runner.lock\n' "$(job_dir "${job_name}")" "${role}"
+}
+
+acquire_runner_lock() {
+  local job_name="$1"
+  local role="$2"
+  local lock_file
+  lock_file="$(runner_lock_path "${job_name}" "${role}")"
+
+  ensure_job_exists "${job_name}"
+
+  if [ "${TOTONOE_FORCE_MKDIR_LOCK:-}" != "1" ] && command -v flock >/dev/null 2>&1; then
+    exec {RUNNER_LOCK_FD}> "${lock_file}"
+    if ! flock -nx "${RUNNER_LOCK_FD}"; then
+      eval "exec ${RUNNER_LOCK_FD}>&-"
+      RUNNER_LOCK_FD=""
+      die "${role} runner is already running for job: ${job_name}"
+    fi
+    RUNNER_LOCK_MODE="flock"
+    return
+  fi
+
+  RUNNER_LOCK_DIR="${lock_file}.d"
+  RUNNER_LOCK_MODE="mkdir"
+  if ! mkdir "${RUNNER_LOCK_DIR}" 2>/dev/null; then
+    # stale lock の回収を試みる
+    if _try_reclaim_stale_lock "${RUNNER_LOCK_DIR}"; then
+      if ! mkdir "${RUNNER_LOCK_DIR}" 2>/dev/null; then
+        die "${role} runner is already running for job: ${job_name}"
+      fi
+    else
+      die "${role} runner is already running for job: ${job_name}"
+    fi
+  fi
+  _write_lock_metadata "${RUNNER_LOCK_DIR}"
+}
+
+release_runner_lock() {
+  case "${RUNNER_LOCK_MODE}" in
+    flock)
+      if [ -n "${RUNNER_LOCK_FD}" ]; then
+        flock -u "${RUNNER_LOCK_FD}" || true
+        eval "exec ${RUNNER_LOCK_FD}>&-"
+        RUNNER_LOCK_FD=""
+      fi
+      ;;
+    mkdir)
+      if [ -n "${RUNNER_LOCK_DIR}" ]; then
+        rm -f "${RUNNER_LOCK_DIR}/owner.json" 2>/dev/null || true
+        rmdir "${RUNNER_LOCK_DIR}" 2>/dev/null || true
+      fi
+      RUNNER_LOCK_DIR=""
+      ;;
+    "")
+      ;;
+    *)
+      warn "unknown runner lock mode: ${RUNNER_LOCK_MODE}"
+      ;;
+  esac
+  RUNNER_LOCK_MODE=""
+}
 
 release_job_lock() {
   case "${JOB_LOCK_MODE}" in

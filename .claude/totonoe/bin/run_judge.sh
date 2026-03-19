@@ -23,6 +23,8 @@ validate_judge_output() {
     and (.next_step | type == "string")
     and (all(.must_fix[]?; type == "string"))
     and (all(.can_defer[]?; type == "string"))
+    and (.engineer_type == "security" or .engineer_type == "test" or .engineer_type == "performance" or .engineer_type == "refactor" or .engineer_type == "generic")
+    and (.spot_check_required | type == "boolean")
   ' "${json_file}" >/dev/null
 }
 
@@ -33,6 +35,14 @@ normalize_judge_output() {
     | .next_step |= tostring
     | .must_fix |= map(tostring)
     | .can_defer |= map(tostring)
+    | .engineer_type = (
+        if .engineer_type == "security" or .engineer_type == "test"
+           or .engineer_type == "performance" or .engineer_type == "refactor"
+           or .engineer_type == "generic"
+        then .engineer_type
+        else "generic"
+        end
+      )
     | .spot_check_required = (.recommendation == "done")
   ' "${json_file}"
 }
@@ -56,12 +66,54 @@ build_prompt_file() {
     printf '```json\n%s\n```\n\n' "${summary_json}"
     printf '## Reviewer Aggregate\n\n'
     printf '```json\n%s\n```\n\n' "${aggregate_json}"
+    # 過去判定の注入（knowledge 有効時のみ）
+    local past_verdicts=""
+    if should_write_knowledge "${job_name}" 2>/dev/null \
+       && past_verdicts=$("${BIN_DIR}/query_knowledge.sh" --type verdicts --limit 3 --max-chars 500 2>/dev/null); then
+      printf '## 過去の判定傾向（参考情報）\n\n'
+      printf '%s\n\n' "${past_verdicts}"
+      printf '重要: 上記は参考情報です。今回の reviewer_aggregate.json と claude_summary.json の内容に基づいて独立に判断してください。\n'
+      printf '過去の recommendation や engineer_type に引きずられず、今回の指摘内容から判定してください。\n\n'
+    fi
+
     printf '## Output Rules\n\n'
     printf -- '- `recommendation` must be one of `fix`, `continue`, `done`, `human`\n'
+    printf -- '- `engineer_type` is required. Must be one of `security`, `test`, `performance`, `refactor`, `generic`\n'
     printf -- '- `must_fix` should contain only issues that block completion\n'
     printf -- '- `can_defer` should contain only lower-priority items\n'
     printf -- '- `next_step` should be one sentence\n'
+    printf -- '- `spot_check_required` is computed at runtime. Do NOT include it in your output\n'
   } | safe_write "${prompt_file}"
+}
+
+write_knowledge_verdict() {
+  local job_name="$1"
+  local round="$2"
+  local judge_file="$3"
+
+  should_write_knowledge "${job_name}" || return 0
+
+  # jq で SQL を生成する（\u0027 = シングルクォート）
+  local sql
+  sql="$(jq -r \
+    --arg jn "${job_name}" \
+    --argjson rn "${round}" \
+    '
+      def sq: gsub("\u0027"; "\u0027\u0027");
+      def qs: "\u0027" + (. | tostring | sq) + "\u0027";
+
+      "BEGIN;",
+      "DELETE FROM verdicts WHERE job_name = " + ($jn | qs) + " AND round = " + ($rn | tostring) + ";",
+      "INSERT INTO verdicts (job_name, round, recommendation, engineer_type, reason) VALUES ("
+        + ($jn | qs) + ", "
+        + ($rn | tostring) + ", "
+        + (.recommendation | qs) + ", "
+        + ((.engineer_type // "generic") | qs) + ", "
+        + (.reason | qs) + ");",
+      "COMMIT;"
+    ' "${judge_file}")"
+
+  _kdb_exec "${sql}"
 }
 
 main() {
@@ -92,6 +144,13 @@ main() {
 
   validate_job_name "${job_name}"
   ensure_job_exists "${job_name}"
+
+  acquire_runner_lock "${job_name}" "judge"
+  _judge_cleanup() {
+    release_runner_lock
+    release_job_lock
+  }
+  trap _judge_cleanup EXIT
 
   local state_file state_json status current_round target_round round_path prompt_file normalized_output
   state_file="$(state_path "${job_name}")"
@@ -125,19 +184,22 @@ main() {
     die "judge execution failed"
   fi
 
-  validate_judge_output "${round_path}/judge.json" || {
+  normalize_judge_output "${round_path}/judge.json" > "${normalized_output}"
+
+  validate_judge_output "${normalized_output}" || {
     rm -f "${normalized_output}"
     die "judge output failed validation"
   }
 
-  normalize_judge_output "${round_path}/judge.json" > "${normalized_output}"
   safe_write "${round_path}/judge.json" < "${normalized_output}"
 
   local recommendation
   recommendation="$(safe_read "${round_path}/judge.json" | jq -r '.recommendation')"
 
+  # knowledge DB への書き込み（state 遷移前に実行する）
+  write_knowledge_verdict "${job_name}" "${target_round}" "${round_path}/judge.json"
+
   acquire_job_lock "${job_name}"
-  trap release_job_lock EXIT
 
   state_json="$(safe_read "${state_file}")"
   status="$(printf '%s\n' "${state_json}" | jq -r '.status')"
@@ -172,7 +234,6 @@ main() {
       }')"
 
   release_job_lock
-  trap - EXIT
 
   rm -f "${normalized_output}"
 
