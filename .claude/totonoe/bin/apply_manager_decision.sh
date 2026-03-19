@@ -10,7 +10,7 @@ usage() {
   cat <<'EOF'
 Usage:
   .claude/totonoe/bin/apply_manager_decision.sh --job-name <name> --record-spot-check [--force]
-  .claude/totonoe/bin/apply_manager_decision.sh --job-name <name> --decision <fix|continue|done|human> [--reason "<text>"] [--from-judge <path>] [--force]
+  .claude/totonoe/bin/apply_manager_decision.sh --job-name <name> --decision <fix|continue|done|human> [--reason "<text>"] [--lesson "<text>"] [--from-judge <path>] [--force]
 EOF
 }
 
@@ -57,6 +57,20 @@ done_guard_failure_reason() {
   return 0
 }
 
+# knowledge 学習を許可する条件（通常完了のみ、--force done では false）
+is_clean_done() {
+  local state_json="$1"
+  local round_path="$2"
+  local judge_file="$3"
+  local current_round recommendation spot_round
+
+  current_round="$(printf '%s\n' "${state_json}" | jq -r '.current_round')"
+  recommendation="$(safe_read "${judge_file}" | jq -r '.recommendation')"
+  spot_round="$(printf '%s\n' "${state_json}" | jq -r '.manager_spot_check.round // -1')"
+
+  [ "${recommendation}" = "done" ] && [ "${spot_round}" = "${current_round}" ]
+}
+
 main() {
   require_cmd jq
 
@@ -64,6 +78,7 @@ main() {
   local record_spot_check="0"
   local decision=""
   local reason=""
+  local lesson=""
   local from_judge=""
   local force="0"
 
@@ -83,6 +98,10 @@ main() {
         ;;
       --reason)
         reason="${2:-}"
+        shift 2
+        ;;
+      --lesson)
+        lesson="${2:-}"
         shift 2
         ;;
       --from-judge)
@@ -119,6 +138,9 @@ main() {
         die "invalid decision: ${decision}"
         ;;
     esac
+  fi
+  if [ -n "${lesson}" ] && [ "${decision}" != "done" ]; then
+    die "--lesson は --decision done のときのみ使用できます"
   fi
 
   acquire_job_lock "${job_name}"
@@ -249,6 +271,17 @@ main() {
         applied_decision: $applied,
         reason: $reason
       }')"
+
+  release_job_lock
+
+  # done 確定後に learn.sh を呼ぶ（lock 解放後に実行する）
+  # --force で done にしたケースでは knowledge 学習しない（通常完了条件を満たした事例のみ学習）
+  if [ "${final_decision}" = "done" ] && should_write_knowledge "${job_name}" 2>/dev/null \
+     && is_clean_done "${state_json}" "${round_path}" "${judge_file}"; then
+    local learn_args=(--job-name "${job_name}")
+    [ -n "${lesson}" ] && learn_args+=(--lesson "${lesson}")
+    "${BIN_DIR}/learn.sh" "${learn_args[@]}" || warn "learn.sh failed for job: ${job_name}"
+  fi
 
   printf 'applied manager decision %s for job %s round %03d\n' "${final_decision}" "${job_name}" "${current_round}"
 }
