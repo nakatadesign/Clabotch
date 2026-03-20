@@ -152,7 +152,7 @@ final class CoordinatorBinder {
         case .responding:
             base = "返答中..."
         case .working(let toolName):
-            base = "作業中... (\(toolName))"
+            base = "実行中...(\(toolName))"
         case .done(let elapsedMs):
             if elapsedMs > 0 {
                 base = "完了！(\(Self.formatElapsedTime(elapsedMs)))"

@@ -125,7 +125,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
 
         waitForCondition(description: "bubble shows working text") {
-            self.activeBubbleSpy.lastText == "作業中... (Bash)"
+            self.activeBubbleSpy.lastText == "実行中...(Bash)"
         }
     }
 
@@ -506,7 +506,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .toolStart(sessionID: "s2", toolName: "Bash"))
 
         waitForCondition(description: "bubble shows [+1] suffix") {
-            self.activeBubbleSpy.lastText == "作業中... (Bash) [+1]"
+            self.activeBubbleSpy.lastText == "実行中...(Bash) [+1]"
         }
     }
 
@@ -532,7 +532,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .toolStart(sessionID: "s1", toolName: "Read"))
 
         waitForCondition(description: "bubble shows [+1]") {
-            self.activeBubbleSpy.lastText == "作業中... (Read) [+1]"
+            self.activeBubbleSpy.lastText == "実行中...(Read) [+1]"
         }
 
         // s2 が done → session cleanup 後にサフィックスが消える
@@ -540,7 +540,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
 
         // done セッションの cleanup（doneAutoTransitionDelay=0.3s）を待つ
         waitForCondition(description: "suffix disappears after session cleanup") {
-            self.activeBubbleSpy.lastText == "作業中... (Read)"
+            self.activeBubbleSpy.lastText == "実行中...(Read)"
         }
     }
 

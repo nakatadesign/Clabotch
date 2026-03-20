@@ -109,7 +109,7 @@ final class AppDelegateCoordinatorTests: XCTestCase {
 
     func testBubbleTextWorking() {
         let binder = makeBinderWithNoSessions()
-        XCTAssertEqual(binder.bubbleText(for: .working(toolName: "Bash")), "作業中... (Bash)")
+        XCTAssertEqual(binder.bubbleText(for: .working(toolName: "Bash")), "実行中...(Bash)")
     }
 
     func testBubbleTextIdleNil() {

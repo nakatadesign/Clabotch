@@ -45,15 +45,15 @@ final class ClabotchEyeView: NSView {
     static let defaultThinkingAnimInterval: TimeInterval = 0.8
     var thinkingAnimInterval: TimeInterval = defaultThinkingAnimInterval
 
-    /// RESPONDING アニメーション: 中央⇔左下をゆっくり交互（「書いている」感）
-    static let respondingAnimSequence: [GazeFrame] = [
-        .f01_center,
-        .f03_leftDown,
+    /// RESPONDING アニメーション: 右上⇔左上 + 上下揺れ（旧 thinking 表情を引き継ぎ, patch_020）
+    static let respondingAnimSequence: [(frame: GazeFrame, yOffset: CGFloat)] = [
+        (.f05_rightUp, -1),   // 右上 + 1dot 上
+        (.f04_leftUp,   0),   // 左上 + 原点
     ]
 
-    /// RESPONDING アニメーション各ステップの間隔（thinking より遅く、静かな印象）。
+    /// RESPONDING アニメーション各ステップの間隔。
     /// テストや実機チューニングのために変更可能。
-    static let defaultRespondingAnimInterval: TimeInterval = 2.0
+    static let defaultRespondingAnimInterval: TimeInterval = 0.8
     var respondingAnimInterval: TimeInterval = defaultRespondingAnimInterval
 
     /// DONE アニメーション: 左下から時計回り2周 → 左下で停止
@@ -254,16 +254,15 @@ final class ClabotchEyeView: NSView {
             cancelBlink()
         case .thinking:
             faceColor = Palette.faceNormal
-            pupilColor = Palette.thinkingDot  // 青系瞳で thinking を明示
+            pupilColor = Palette.pupil  // 静止表情（patch_020: 専用アニメを responding へ移管）
             showErrorX = false
             showSurprise = false
             showSleepingEyes = false
             showHappyEyes = false
             cancelBlink()
-            startThinkingAnimation()
         case .responding:
             faceColor = Palette.faceNormal
-            pupilColor = Palette.pupil
+            pupilColor = Palette.thinkingDot  // 青系瞳（patch_020: 旧 thinking 表情を引き継ぎ）
             showErrorX = false
             showSurprise = false
             showSleepingEyes = false
@@ -271,7 +270,7 @@ final class ClabotchEyeView: NSView {
             cancelBlink()
             startRespondingAnimation()
         case .working:
-            faceColor = Palette.faceDone  // 暖かいゴールド
+            faceColor = Palette.faceNormal  // 通常色（patch_020）
             pupilColor = Palette.pupil
             showErrorX = false
             showSurprise = false
@@ -499,10 +498,12 @@ final class ClabotchEyeView: NSView {
 
     // MARK: - RESPONDING アニメーション
 
-    /// RESPONDING アニメーションを開始する。中央⇔左下をゆっくり交互に動かす。
+    /// RESPONDING アニメーションを開始する。右上⇔左上 + 上下揺れ（patch_020: 旧 thinking 表情を引き継ぎ）。
     private func startRespondingAnimation() {
         respondingStep = 0
-        respondingAnimFrame = Self.respondingAnimSequence[0]
+        let first = Self.respondingAnimSequence[0]
+        respondingAnimFrame = first.frame
+        shakeYOffset = first.yOffset
 
         respondingTimer = Timer.scheduledTimer(
             withTimeInterval: respondingAnimInterval,
@@ -510,7 +511,9 @@ final class ClabotchEyeView: NSView {
         ) { [weak self] timer in
             guard let self else { timer.invalidate(); return }
             self.respondingStep = (self.respondingStep + 1) % Self.respondingAnimSequence.count
-            self.respondingAnimFrame = Self.respondingAnimSequence[self.respondingStep]
+            let step = Self.respondingAnimSequence[self.respondingStep]
+            self.respondingAnimFrame = step.frame
+            self.shakeYOffset = step.yOffset
             self.scheduleUpdate()
         }
     }
