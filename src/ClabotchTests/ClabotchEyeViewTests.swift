@@ -482,11 +482,39 @@ final class ClabotchEyeViewTests: XCTestCase {
         timer.invalidate()
     }
 
-    func testThinkingAnimationNoVerticalBob() {
-        // thinking アニメーションは上下揺れなし
+    func testThinkingAnimationHasVerticalBob() {
+        // thinking アニメーションは上下揺れあり（patch_019: yOffset=[-1, 0]）
+        sut.thinkingAnimInterval = 0.05  // テスト高速化
         sut.setPhaseAppearance(phase: .thinking)
-        XCTAssertEqual(sut.shakeYOffset, 0, accuracy: 0.01,
-                       "thinking アニメーションに上下揺れはないべき")
+
+        // 初期ステップ: 右上 + yOffset=-1（1dot 上）
+        XCTAssertEqual(sut.thinkingAnimFrame, .f05_rightUp)
+        XCTAssertEqual(sut.shakeYOffset, -1, accuracy: 0.01,
+                       "初期ステップは 1dot 上")
+
+        // 2番目のステップを待つ: 左上 + yOffset=0（原点）
+        let exp = expectation(description: "2番目のステップ")
+        let checkTimer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { _ in
+            if self.sut.thinkingAnimFrame == .f04_leftUp {
+                XCTAssertEqual(self.sut.shakeYOffset, 0, accuracy: 0.01,
+                               "2番目のステップは原点")
+                exp.fulfill()
+            }
+        }
+        wait(for: [exp], timeout: 1.0)
+        checkTimer.invalidate()
+    }
+
+    func testThinkingSetsPupilColorToThinkingDot() {
+        // thinking 時は瞳色が thinkingDot（青系）に変わる（patch_019）
+        sut.setPhaseAppearance(phase: .thinking)
+        XCTAssertEqual(sut.pupilColor, ClabotchEyeView.Palette.thinkingDot,
+                       "thinking 時は瞳が青系になるべき")
+
+        // idle に戻ると通常色に戻る
+        sut.setPhaseAppearance(phase: .idle)
+        XCTAssertEqual(sut.pupilColor, ClabotchEyeView.Palette.pupil,
+                       "idle 時は瞳が通常色に戻るべき")
     }
 
     func testThinkingAnimationStopsOnPhaseChange() {

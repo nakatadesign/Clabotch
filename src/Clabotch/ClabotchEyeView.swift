@@ -36,8 +36,8 @@ final class ClabotchEyeView: NSView {
 
     /// THINKING アニメーション: 視線を右上⇔左上に交互
     static let thinkingAnimSequence: [(frame: GazeFrame, yOffset: CGFloat)] = [
-        (.f05_rightUp, 0),
-        (.f04_leftUp,  0),
+        (.f05_rightUp, -1),   // 右上 + 1dot 上
+        (.f04_leftUp,   0),   // 左上 + 原点
     ]
 
     /// THINKING アニメーション各ステップの間隔。
@@ -110,6 +110,8 @@ final class ClabotchEyeView: NSView {
     /// まばたきの現在の段階。.open 以外はまばたき中。
     private(set) var blinkStage: BlinkStage = .open
     private(set) var faceColor: NSColor = Palette.faceNormal
+    /// 瞳の色。通常は Palette.pupil（ほぼ黒）、thinking 時は Palette.thinkingDot（青系）。
+    private(set) var pupilColor: NSColor = Palette.pupil
     private(set) var showErrorX: Bool = false
     private(set) var showSurprise: Bool = false
     private(set) var showSleepingEyes: Bool = false
@@ -244,6 +246,7 @@ final class ClabotchEyeView: NSView {
         switch phase {
         case .idle:
             faceColor = Palette.faceNormal
+            pupilColor = Palette.pupil
             showErrorX = false
             showSurprise = false
             showSleepingEyes = false
@@ -251,6 +254,7 @@ final class ClabotchEyeView: NSView {
             cancelBlink()
         case .thinking:
             faceColor = Palette.faceNormal
+            pupilColor = Palette.thinkingDot  // 青系瞳で thinking を明示
             showErrorX = false
             showSurprise = false
             showSleepingEyes = false
@@ -259,6 +263,7 @@ final class ClabotchEyeView: NSView {
             startThinkingAnimation()
         case .responding:
             faceColor = Palette.faceNormal
+            pupilColor = Palette.pupil
             showErrorX = false
             showSurprise = false
             showSleepingEyes = false
@@ -267,6 +272,7 @@ final class ClabotchEyeView: NSView {
             startRespondingAnimation()
         case .working:
             faceColor = Palette.faceDone  // 暖かいゴールド
+            pupilColor = Palette.pupil
             showErrorX = false
             showSurprise = false
             showSleepingEyes = false
@@ -274,6 +280,7 @@ final class ClabotchEyeView: NSView {
             cancelBlink()
         case .done:
             faceColor = Palette.faceDone
+            pupilColor = Palette.pupil
             showErrorX = false
             showSurprise = true
             showSleepingEyes = false
@@ -283,6 +290,7 @@ final class ClabotchEyeView: NSView {
             startRainbowAnimation()
         case .error:
             faceColor = Palette.faceError
+            pupilColor = Palette.pupil
             showErrorX = true
             showSurprise = false
             showSleepingEyes = false
@@ -291,6 +299,7 @@ final class ClabotchEyeView: NSView {
             startErrorShakeAnimation()
         case .sleeping:
             faceColor = Palette.faceSleep
+            pupilColor = Palette.pupil
             showErrorX = false
             showSurprise = false
             showSleepingEyes = true
@@ -722,7 +731,7 @@ final class ClabotchEyeView: NSView {
     /// フレーム丸ごと切り替え（座標計算禁止）
     private func drawPupils(ctx: CGContext, dot: CGFloat, ox: CGFloat, oy: CGFloat,
                             dy: CGFloat = 0, frame: GazeFrame) {
-        ctx.setFillColor(Palette.pupil.cgColor)
+        ctx.setFillColor(pupilColor.cgColor)
 
         // 左目ソケット基点: (sx=2, sy=2) サイズ 5×10
         // 右目ソケット基点: (sx=13, sy=2) サイズ 5×10
