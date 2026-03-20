@@ -380,8 +380,8 @@ final class ClabotchEyeViewTests: XCTestCase {
 
     func testJumpAppliesInitialOffset() {
         sut.performJump()
-        // 初期位置は ↑6px
-        XCTAssertEqual(sut.frame.origin.y, 6)
+        // 初期位置は ↑6px（image ベースでは jumpYOffset で管理）
+        XCTAssertEqual(sut.jumpYOffset, 6)
     }
 
     func testJumpCompletesAndResetsToOrigin() {
@@ -391,7 +391,7 @@ final class ClabotchEyeViewTests: XCTestCase {
         let exp = expectation(description: "ジャンプ完了")
         let totalDuration = sut.jumpInterval * Double(ClabotchEyeView.jumpSequence.count)
         DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration + 0.1) {
-            XCTAssertEqual(self.sut.frame.origin.y, 0, "ジャンプ完了後は原点に戻るべき")
+            XCTAssertEqual(self.sut.jumpYOffset, 0, "ジャンプ完了後は原点に戻るべき")
             XCTAssertFalse(self.sut.isJumping, "ジャンプ完了後は isJumping=false であるべき")
             exp.fulfill()
         }
@@ -405,7 +405,7 @@ final class ClabotchEyeViewTests: XCTestCase {
         // phase 変更でジャンプが停止する
         sut.setPhaseAppearance(phase: .idle)
         XCTAssertFalse(sut.isJumping)
-        XCTAssertEqual(sut.frame.origin.y, 0)
+        XCTAssertEqual(sut.jumpYOffset, 0)
     }
 
     // MARK: - 虹色アニメーション（DONE）
@@ -668,5 +668,129 @@ final class ClabotchEyeViewTests: XCTestCase {
         // ClabotchEyeView はクリック透過 — NSStatusBarButton にイベントを委譲
         let result = sut.hitTest(NSPoint(x: 11, y: 7))
         XCTAssertNil(result)
+    }
+
+    // MARK: - button.image 生成経路（patch_018）
+
+    func testUpdateStatusImageWithoutButton() {
+        // statusBarButton が nil のとき updateStatusImage は何もしない（クラッシュしない）
+        XCTAssertNil(sut.statusBarButton)
+        sut.updateStatusImage()
+    }
+
+    func testUpdateStatusImageGeneratesImage() throws {
+        let statusItem = NSStatusBar.system.statusItem(withLength: 22)
+        defer { NSStatusBar.system.removeStatusItem(statusItem) }
+        let button = try XCTUnwrap(statusItem.button, "NSStatusItem.button が取得できない")
+
+        sut.statusBarButton = button
+        sut.updateStatusImage()
+
+        XCTAssertNotNil(button.image, "updateStatusImage 後に button.image が設定されるべき")
+    }
+
+    func testScheduleUpdateSetsImage() throws {
+        let statusItem = NSStatusBar.system.statusItem(withLength: 22)
+        defer { NSStatusBar.system.removeStatusItem(statusItem) }
+        let button = try XCTUnwrap(statusItem.button)
+
+        sut.statusBarButton = button
+        sut.scheduleUpdate()
+
+        XCTAssertNotNil(button.image, "scheduleUpdate 後に button.image が設定されるべき")
+    }
+
+    func testSetPhaseAppearanceUpdatesImage() throws {
+        let statusItem = NSStatusBar.system.statusItem(withLength: 22)
+        defer { NSStatusBar.system.removeStatusItem(statusItem) }
+        let button = try XCTUnwrap(statusItem.button)
+
+        sut.statusBarButton = button
+        sut.setPhaseAppearance(phase: .thinking)
+
+        XCTAssertNotNil(button.image, "phase 変更後に button.image が更新されるべき")
+    }
+
+    func testPerformJumpUpdatesImage() throws {
+        let statusItem = NSStatusBar.system.statusItem(withLength: 22)
+        defer { NSStatusBar.system.removeStatusItem(statusItem) }
+        let button = try XCTUnwrap(statusItem.button)
+
+        sut.statusBarButton = button
+        sut.performJump()
+
+        XCTAssertEqual(sut.jumpYOffset, 6, "初期ジャンプオフセットが設定されるべき")
+        XCTAssertNotNil(button.image, "jump 開始後に button.image が更新されるべき")
+    }
+
+    func testViewDidMoveToWindowTriggersImageUpdate() throws {
+        let statusItem = NSStatusBar.system.statusItem(withLength: 22)
+        defer { NSStatusBar.system.removeStatusItem(statusItem) }
+        let button = try XCTUnwrap(statusItem.button)
+
+        sut.statusBarButton = button
+        button.addSubview(sut)
+
+        // viewDidMoveToWindow → scheduleUpdate → updateStatusImage
+        XCTAssertNotNil(button.image, "window 接続時に button.image が生成されるべき")
+
+        sut.removeFromSuperview()
+    }
+
+    /// AppDelegate.setupEyeView(on:) を直接呼び、本番初期化順で button.image が生成されることを検証。
+    /// 初期化順の変更や scheduleUpdate() 脱落を検知する。
+    func testSetupEyeViewGeneratesImage() throws {
+        let statusItem = NSStatusBar.system.statusItem(withLength: 22)
+        defer { NSStatusBar.system.removeStatusItem(statusItem) }
+        let button = try XCTUnwrap(statusItem.button)
+
+        XCTAssertNil(button.image, "setupEyeView 前は image が nil")
+
+        let view = AppDelegate.setupEyeView(on: button)
+
+        XCTAssertNotNil(button.image, "setupEyeView 後に button.image が生成されるべき")
+        XCTAssertNotNil(view.statusBarButton, "statusBarButton が設定されるべき")
+        XCTAssertTrue(view.isHidden, "subview は isHidden=true であるべき")
+
+        view.removeFromSuperview()
+    }
+
+    /// 旧初期化順（addSubview → statusBarButton）では viewDidMoveToWindow が空振りして
+    /// image が生成されないことを検証。setupEyeView の scheduleUpdate() が脱落すると
+    /// この状態に退行する。
+    func testOldInitOrderDoesNotGenerateImage() throws {
+        let statusItem = NSStatusBar.system.statusItem(withLength: 22)
+        defer { NSStatusBar.system.removeStatusItem(statusItem) }
+        let button = try XCTUnwrap(statusItem.button)
+
+        let view = ClabotchEyeView(frame: button.bounds)
+        // 旧順序: addSubview → statusBarButton（scheduleUpdate なし）
+        button.addSubview(view)          // viewDidMoveToWindow 発火 → statusBarButton==nil → 空振り
+        view.statusBarButton = button    // ここでは scheduleUpdate は呼ばれない
+        view.isHidden = true
+
+        // 旧順序では image が生成されない（初回空白の回帰パターン）
+        XCTAssertNil(button.image, "旧初期化順では image が生成されない")
+
+        view.removeFromSuperview()
+    }
+
+    /// statusBarButton 未設定で updateStatusImage が空振りし、
+    /// 設定 + scheduleUpdate で image が生成されることを検証する回帰テスト。
+    func testImageNotGeneratedWithoutStatusBarButton() throws {
+        let statusItem = NSStatusBar.system.statusItem(withLength: 22)
+        defer { NSStatusBar.system.removeStatusItem(statusItem) }
+        let button = try XCTUnwrap(statusItem.button)
+
+        let view = ClabotchEyeView(frame: button.bounds)
+
+        // statusBarButton 未設定で updateStatusImage → 空振り
+        view.updateStatusImage()
+        XCTAssertNil(button.image, "statusBarButton 未設定なら image は生成されない")
+
+        // statusBarButton 設定 + scheduleUpdate → image 生成
+        view.statusBarButton = button
+        view.scheduleUpdate()
+        XCTAssertNotNil(button.image, "statusBarButton 設定 + scheduleUpdate で image が生成されるべき")
     }
 }

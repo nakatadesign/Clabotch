@@ -23,13 +23,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // メニューバー設定（22px 固定幅）
         statusItem = NSStatusBar.system.statusItem(withLength: 22)
 
-        // ClabotchEyeView をステータスバーボタンに埋め込む
+        // ClabotchEyeView を button.image ベースで描画する（patch_018: macOS メニューバー dim 対応）
         if let button = statusItem?.button {
             button.title = ""
-            let view = ClabotchEyeView(frame: button.bounds)
-            view.autoresizingMask = [.width, .height]
-            button.addSubview(view)
-            eyeView = view
+            eyeView = Self.setupEyeView(on: button)
         }
 
         // メニュー構築
@@ -191,6 +188,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
             NSWorkspace.shared.open(url)
         }
+    }
+
+    // MARK: - EyeView セットアップ（patch_018）
+
+    /// ClabotchEyeView を button.image ベースで初期化する。
+    /// 描画結果を button.image に反映し、macOS の自動 dim に委ねる。
+    /// subview は isHidden=true で残す（テスト互換性。表示の source of truth は button.image）。
+    ///
+    /// 初期化順（変更禁止）:
+    ///   ① statusBarButton 設定 → ② addSubview → ③ isHidden=true → ④ scheduleUpdate
+    /// テストから直接呼べるよう static メソッドとして公開。
+    @discardableResult
+    static func setupEyeView(on button: NSStatusBarButton) -> ClabotchEyeView {
+        let view = ClabotchEyeView(frame: button.bounds)
+        view.autoresizingMask = [.width, .height]
+        view.statusBarButton = button      // ① image 更新先を先に設定
+        button.addSubview(view)            // ② subview 追加（viewDidMoveToWindow が発火）
+        view.isHidden = true               // ③ 描画は button.image で行う
+        view.scheduleUpdate()              // ④ 初回 image を確定的に生成
+        return view
     }
 
     private func statusItemAnchor() -> CGPoint? {

@@ -142,6 +142,13 @@ final class ClabotchEyeView: NSView {
     /// ジャンプ現在ステップ
     private var jumpStep: Int = 0
 
+    /// ジャンプの Y オフセット（image ベース描画用。旧 frame.origin.y の代替）
+    private(set) var jumpYOffset: CGFloat = 0
+
+    /// image 更新先の NSStatusBarButton。AppDelegate が設定する。
+    /// 設定されている場合、needsDisplay の代わりに button.image を直接更新する。
+    weak var statusBarButton: NSStatusBarButton?
+
     /// まばたきシーケンスの現在ステップ
     private var blinkSeqStep: Int = 0
 
@@ -200,7 +207,7 @@ final class ClabotchEyeView: NSView {
         dispatchPrecondition(condition: .onQueue(.main))
         guard gazeFrame != frame else { return }
         gazeFrame = frame
-        needsDisplay = true
+        scheduleUpdate()
     }
 
     /// まばたきを発火する。BlinkController.onBlink から呼ばれる。
@@ -217,14 +224,14 @@ final class ClabotchEyeView: NSView {
     func showMenuFace() {
         dispatchPrecondition(condition: .onQueue(.main))
         showErrorX = true
-        needsDisplay = true
+        scheduleUpdate()
     }
 
     /// メニュー閉じたらエラー目を解除する。
     func hideMenuFace() {
         dispatchPrecondition(condition: .onQueue(.main))
         showErrorX = false
-        needsDisplay = true
+        scheduleUpdate()
     }
 
     /// phase に応じた外見を設定する。AppDelegate が onPhaseChanged で呼ぶ。
@@ -294,7 +301,7 @@ final class ClabotchEyeView: NSView {
         os_log(.default, "🎨 EyeView: phase=%{public}@ faceColor=%{public}@ errorX=%d surprise=%d blinkStage=%{public}@",
                phase.debugName, Self.colorHex(faceColor),
                showErrorX ? 1 : 0, showSurprise ? 1 : 0, String(describing: blinkStage))
-        needsDisplay = true
+        scheduleUpdate()
     }
 
     // MARK: - まばたきシーケンス制御（patch_012）
@@ -306,13 +313,13 @@ final class ClabotchEyeView: NSView {
             blinkStage = .open
             blinkTimer?.invalidate()
             blinkTimer = nil
-            needsDisplay = true
+            scheduleUpdate()
             return
         }
 
         let step = Self.blinkSequence[blinkSeqStep]
         blinkStage = step.stage
-        needsDisplay = true
+        scheduleUpdate()
 
         blinkTimer?.invalidate()
         blinkTimer = Timer.scheduledTimer(
@@ -350,7 +357,7 @@ final class ClabotchEyeView: NSView {
             self.animationStep += 1
             if self.animationStep < Self.doneAnimSequence.count {
                 self.doneAnimPupilFrame = Self.doneAnimSequence[self.animationStep]
-                self.needsDisplay = true
+                self.scheduleUpdate()
             } else {
                 // アニメーション完了 — ハッピー目（⌒）に切替
                 timer.invalidate()
@@ -358,7 +365,7 @@ final class ClabotchEyeView: NSView {
                 self.showSurprise = false
                 self.showHappyEyes = true
                 self.doneAnimPupilFrame = nil
-                self.needsDisplay = true
+                self.scheduleUpdate()
             }
         }
     }
@@ -378,12 +385,11 @@ final class ClabotchEyeView: NSView {
             self.animationStep += 1
             if self.animationStep < Self.errorShakeSequence.count {
                 self.shakeYOffset = Self.errorShakeSequence[self.animationStep]
-                self.needsDisplay = true
+                self.scheduleUpdate()
             } else {
                 // シェイク完了 — オフセットをリセット
                 self.shakeYOffset = 0
-                self.frame.origin.y = 0
-                self.needsDisplay = true
+                self.scheduleUpdate()
                 timer.invalidate()
                 self.animationTimer = nil
             }
@@ -421,9 +427,12 @@ final class ClabotchEyeView: NSView {
         }
     }
 
-    /// ジャンプの Y オフセットを適用する。ビューの frame.origin.y を変更。
+    /// ジャンプの Y オフセットを適用する。
+    /// image ベースで ctx.translateBy によりコンテンツを上にずらす。
+    /// button.bounds の上端を超える部分はクリップされるが、一瞬の演出なので許容。
     private func applyJumpOffset(_ offset: CGFloat) {
-        frame.origin.y = offset
+        jumpYOffset = offset
+        scheduleUpdate()
     }
 
     /// ジャンプアニメーションを停止する。
@@ -432,7 +441,7 @@ final class ClabotchEyeView: NSView {
         jumpTimer = nil
         jumpStep = 0
         isJumping = false
-        frame.origin.y = 0
+        jumpYOffset = 0
     }
 
     /// 進行中のアニメーション（THINKING / DONE スピン / ERROR シェイク / ジャンプ / 虹色）を停止し状態をリセットする。
@@ -467,7 +476,7 @@ final class ClabotchEyeView: NSView {
             let step = Self.thinkingAnimSequence[self.thinkingStep]
             self.thinkingAnimFrame = step.frame
             self.shakeYOffset = step.yOffset
-            self.needsDisplay = true
+            self.scheduleUpdate()
         }
     }
 
@@ -493,7 +502,7 @@ final class ClabotchEyeView: NSView {
             guard let self else { timer.invalidate(); return }
             self.respondingStep = (self.respondingStep + 1) % Self.respondingAnimSequence.count
             self.respondingAnimFrame = Self.respondingAnimSequence[self.respondingStep]
-            self.needsDisplay = true
+            self.scheduleUpdate()
         }
     }
 
@@ -524,7 +533,7 @@ final class ClabotchEyeView: NSView {
             guard let self else { return }
             self.rainbowHue -= Self.rainbowHueStep
             if self.rainbowHue < 0.0 { self.rainbowHue += 1.0 }
-            self.needsDisplay = true
+            self.scheduleUpdate()
         }
     }
 
@@ -544,65 +553,132 @@ final class ClabotchEyeView: NSView {
         return -logicalOffset * dot
     }
 
+    // MARK: - Window 接続時の初回 image 更新
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // button.window が確定した時点で初回 image を生成する。
+        // applicationDidFinishLaunching 時点では window が nil の場合があり、
+        // updateStatusImage() が空振りして初回空白になることを防ぐ。
+        if window != nil {
+            scheduleUpdate()
+        }
+    }
+
+    /// モニター移動などで backing scale が変わったときに image を再生成する。
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        scheduleUpdate()
+    }
+
     // MARK: - 描画
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        renderContent(ctx: ctx, bounds: bounds)
+    }
+
+    /// 状態変化時に呼ぶ統合更新メソッド。
+    /// subview として存在する場合は needsDisplay で draw() を発火し、
+    /// statusBarButton が設定されている場合は image も更新する。
+    func scheduleUpdate() {
+        needsDisplay = true
+        updateStatusImage()
+    }
+
+    /// 現在の表示状態を NSImage に描画して statusBarButton.image に反映する。
+    /// macOS のメニューバー dim はこの image に対して自動適用される。
+    func updateStatusImage() {
+        guard let button = statusBarButton else { return }
+        let size = button.bounds.size
+        guard size.width > 0 && size.height > 0 else { return }
+
+        let scale = button.window?.screen?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2.0
+        let pixelW = Int(size.width * scale)
+        let pixelH = Int(size.height * scale)
+        guard let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: pixelW,
+            pixelsHigh: pixelH,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ) else { return }
+        rep.size = size
+
+        NSGraphicsContext.saveGraphicsState()
+        guard let gctx = NSGraphicsContext(bitmapImageRep: rep) else {
+            NSGraphicsContext.restoreGraphicsState()
+            return
+        }
+        NSGraphicsContext.current = gctx
+        renderContent(ctx: gctx.cgContext, bounds: NSRect(origin: .zero, size: size))
+        NSGraphicsContext.restoreGraphicsState()
+
+        let image = NSImage(size: size)
+        image.addRepresentation(rep)
+        image.isTemplate = false
+        button.image = image
+    }
+
+    /// 描画の実体。draw() と updateStatusImage() の両方から呼ばれる。
+    private func renderContent(ctx: CGContext, bounds: NSRect) {
         let dot = min(bounds.width / Self.canvasWidth, bounds.height / Self.canvasHeight)
 
         // キャンバスを bounds 中央に配置するオフセット
         let ox = (bounds.width  - Self.canvasWidth  * dot) / 2
         let oy = (bounds.height - Self.canvasHeight * dot) / 2
 
-        // ERROR シェイク: frame.origin.y でビュー全体を動かす（クリッピング回避）
-        let shakeDY = Self.shakeOffsetToViewDY(logicalOffset: shakeYOffset, dot: dot)
-        if shakeDY != 0 {
-            frame.origin.y = shakeDY
-        }
-        let dy: CGFloat = 0
-
         // 背景クリア（メニューバーは透明）
         ctx.clear(bounds)
+
+        // ジャンプ/シェイクの Y オフセット（image ベース: ctx 内でずらす）
+        let shakeDY = Self.shakeOffsetToViewDY(logicalOffset: shakeYOffset, dot: dot)
+        let totalDY = shakeDY + jumpYOffset
+        if totalDY != 0 {
+            ctx.saveGState()
+            ctx.translateBy(x: 0, y: totalDY)
+        }
+        let dy: CGFloat = 0
 
         // 顔（16×12 at (3,1)）
         drawFace(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
 
         switch blinkStage {
         case .closed:
-            // 完全閉じ目（frame06）
             drawBlinkClosed(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
         case .almost:
-            // ほぼ閉じ: ソケット 4×2、瞳なし（patch_012）
             drawBlinkAlmost(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
         case .half:
-            // 半閉じ: ソケット 4×4、瞳 2×2（patch_012）
             drawBlinkHalf(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
         case .open:
             if showHappyEyes {
-                // ハッピー: ⌒ 上向きアーチ（done 完了後）
                 drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
                 drawHappyEyes(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
             } else if showSleepingEyes {
-                // スリープ: ^_^ 閉じ目
                 drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
                 drawSleepingEyes(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
             } else if showErrorX {
-                // エラー: ×マーク（frame07 / frame10 / frame11）
                 drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
                 drawErrorX(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
             } else if showSurprise {
-                // DONE アニメーション（frame08〜14）
                 let pupilFrame = doneAnimPupilFrame ?? .f01_center
                 drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
                 drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy, frame: pupilFrame)
             } else {
-                // 通常: 目 + 瞳（thinking/responding アニメーション中はそのフレームを優先）
                 let activeFrame = thinkingAnimFrame ?? respondingAnimFrame ?? gazeFrame
                 drawEyeSockets(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy)
                 drawPupils(ctx: ctx, dot: dot, ox: ox, oy: oy, dy: dy, frame: activeFrame)
             }
+        }
+
+        if totalDY != 0 {
+            ctx.restoreGState()
         }
     }
 
