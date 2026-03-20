@@ -182,13 +182,13 @@ final class CoordinatorBinder {
 
     static func workingText(for toolName: String) -> String {
         switch toolName {
-        case "Bash":      return "実行中..."
-        case "Read":      return "読んでる..."
-        case "Write":     return "書いてる..."
-        case "Edit":      return "直してる..."
-        case "Grep":      return "探してる..."
+        case "Bash":      return "実行します..."
+        case "Read":      return "読み込み中..."
+        case "Write":     return "書き込み中..."
+        case "Edit":      return "修正中..."
+        case "Grep":      return "探してます..."
         case "Glob":      return "ファイル探索..."
-        case "Agent":     return "調べてる..."
+        case "Agent":     return "調べてます..."
         case "WebSearch": return "検索中..."
         default:          return "作業中..."
         }
