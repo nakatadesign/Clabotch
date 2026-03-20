@@ -196,6 +196,7 @@ final class ClabotchEyeView: NSView {
         rainbowTimer?.invalidate()
         thinkingTimer?.invalidate()
         respondingTimer?.invalidate()
+        nodTimer?.invalidate()
     }
 
     // MARK: - クリック透過（NSStatusBarButton にイベントを委譲）
@@ -254,21 +255,22 @@ final class ClabotchEyeView: NSView {
             cancelBlink()
         case .thinking:
             faceColor = Palette.faceNormal
-            pupilColor = Palette.pupil  // 静止表情（patch_020: 専用アニメを responding へ移管）
+            pupilColor = Palette.pupil
             showErrorX = false
             showSurprise = false
             showSleepingEyes = false
             showHappyEyes = false
             cancelBlink()
+            performNod()  // 一回頷く
         case .responding:
             faceColor = Palette.faceNormal
-            pupilColor = Palette.thinkingDot  // 青系瞳（patch_020: 旧 thinking 表情を引き継ぎ）
+            pupilColor = Palette.pupil  // 通常色（patch_020）
             showErrorX = false
             showSurprise = false
             showSleepingEyes = false
             showHappyEyes = false
             cancelBlink()
-            startRespondingAnimation()
+            startRespondingAnimation()  // 右上⇔左上 + 上下揺れ（旧 thinking アニメ）
         case .working:
             faceColor = Palette.faceNormal  // 通常色（patch_020）
             pupilColor = Palette.pupil
@@ -452,6 +454,30 @@ final class ClabotchEyeView: NSView {
         jumpYOffset = 0
     }
 
+    // MARK: - 頷きアニメーション（thinking 遷移時に1回だけ）
+
+    private var nodTimer: Timer?
+
+    /// 一回だけ上下に動く頷きアニメーション。session_start 時の「了解」感を演出する。
+    func performNod() {
+        nodTimer?.invalidate()
+        // 下→戻り の2ステップ
+        shakeYOffset = 1  // 1dot 下に
+        scheduleUpdate()
+
+        nodTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.shakeYOffset = 0  // 原点に戻る
+            self.scheduleUpdate()
+            self.nodTimer = nil
+        }
+    }
+
+    private func stopNod() {
+        nodTimer?.invalidate()
+        nodTimer = nil
+    }
+
     /// 進行中のアニメーション（THINKING / DONE スピン / ERROR シェイク / ジャンプ / 虹色）を停止し状態をリセットする。
     private func stopAnimation() {
         animationTimer?.invalidate()
@@ -460,6 +486,7 @@ final class ClabotchEyeView: NSView {
         doneAnimPupilFrame = nil
         showHappyEyes = false
         shakeYOffset = 0
+        stopNod()
         stopThinkingAnimation()
         stopRespondingAnimation()
         stopJump()

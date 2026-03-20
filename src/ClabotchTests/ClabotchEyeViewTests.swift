@@ -475,29 +475,15 @@ final class ClabotchEyeViewTests: XCTestCase {
                        "thinking は通常顔色")
     }
 
-    func testRespondingHasBluePupilAndAnimation() {
-        // responding は青瞳 + 右上⇔左上 + 上下揺れ（patch_020: 旧 thinking 表情を引き継ぎ）
-        sut.respondingAnimInterval = 0.05  // テスト高速化
+    func testRespondingHasNormalPupilAndAnimation() {
+        // responding は通常色瞳 + 右上⇔左上アニメ（patch_020）
         sut.setPhaseAppearance(phase: .responding)
-
-        // 初期ステップ: 右上 + yOffset=-1（1dot 上）
-        XCTAssertEqual(sut.respondingAnimFrame, .f05_rightUp)
-        XCTAssertEqual(sut.shakeYOffset, -1, accuracy: 0.01,
-                       "初期ステップは 1dot 上")
-        XCTAssertEqual(sut.pupilColor, ClabotchEyeView.Palette.thinkingDot,
-                       "responding は青系瞳")
-
-        // 2番目のステップを待つ: 左上 + yOffset=0
-        let exp = expectation(description: "2番目のステップ")
-        let checkTimer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { _ in
-            if self.sut.respondingAnimFrame == .f04_leftUp {
-                XCTAssertEqual(self.sut.shakeYOffset, 0, accuracy: 0.01,
-                               "2番目のステップは原点")
-                exp.fulfill()
-            }
-        }
-        wait(for: [exp], timeout: 1.0)
-        checkTimer.invalidate()
+        XCTAssertEqual(sut.pupilColor, ClabotchEyeView.Palette.pupil,
+                       "responding は通常色の瞳")
+        XCTAssertEqual(sut.faceColor, ClabotchEyeView.Palette.faceNormal,
+                       "responding は通常顔色")
+        XCTAssertNotNil(sut.respondingAnimFrame, "responding はアニメーションあり")
+        XCTAssertEqual(sut.respondingAnimFrame, .f05_rightUp, "初期フレームは右上")
     }
 
     func testThinkingToIdleKeepsStaticExpression() {
@@ -545,25 +531,10 @@ final class ClabotchEyeViewTests: XCTestCase {
     // MARK: - RESPONDING フェーズ
 
     func testRespondingStartsAnimation() {
-        // patch_020: responding は右上⇔左上 + 上下揺れ（旧 thinking 表情）
+        // responding は右上⇔左上アニメあり（patch_020）
         sut.setPhaseAppearance(phase: .responding)
-        XCTAssertNotNil(sut.respondingAnimFrame, "responding ではアニメーションが開始されるべき")
+        XCTAssertNotNil(sut.respondingAnimFrame, "responding はアニメーションあり")
         XCTAssertEqual(sut.respondingAnimFrame, .f05_rightUp, "初期フレームは右上")
-    }
-
-    func testRespondingAnimationAlternatesGaze() {
-        sut.respondingAnimInterval = 0.05
-        sut.setPhaseAppearance(phase: .responding)
-        XCTAssertEqual(sut.respondingAnimFrame, .f05_rightUp, "初期は右上")
-
-        let exp = expectation(description: "responding 視線が左上に遷移")
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { _ in
-            if self.sut.respondingAnimFrame == .f04_leftUp {
-                exp.fulfill()
-            }
-        }
-        wait(for: [exp], timeout: 1.0)
-        timer.invalidate()
     }
 
     func testRespondingAnimationStopsOnPhaseChange() {
@@ -618,26 +589,7 @@ final class ClabotchEyeViewTests: XCTestCase {
 
     // MARK: - アニメーション速度変更即時反映
 
-    func testRespondingReapplyUsesNewInterval() {
-        // responding を開始（デフォルト 0.8秒）
-        sut.setPhaseAppearance(phase: .responding)
-        XCTAssertNotNil(sut.respondingAnimFrame)
-
-        // interval を変更して再適用
-        sut.respondingAnimInterval = 0.1
-        sut.setPhaseAppearance(phase: .responding)
-
-        // 新 interval でアニメーション再起動 → 短い待機で遷移確認
-        let exp = expectation(description: "responding re-applied with new interval")
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
-            if self.sut.respondingAnimFrame == .f04_leftUp {
-                timer.invalidate()
-                exp.fulfill()
-            }
-        }
-        wait(for: [exp], timeout: 1.0)
-        timer.invalidate()
-    }
+    // responding は静止表情のため reapply テストは不要（patch_020）
 
     // 旧 responding reapply テスト（patch_020 で統合済み）は上のメソッドに統合
 

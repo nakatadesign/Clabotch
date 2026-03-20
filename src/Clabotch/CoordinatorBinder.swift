@@ -148,11 +148,11 @@ final class CoordinatorBinder {
         let base: String?
         switch phase {
         case .thinking:
-            base = "考えてます..."
+            base = nil
         case .responding:
-            base = "返答中..."
+            base = "作業中..."
         case .working(let toolName):
-            base = "実行中...(\(toolName))"
+            base = Self.workingText(for: toolName)
         case .done(let elapsedMs):
             if elapsedMs > 0 {
                 base = "完了！(\(Self.formatElapsedTime(elapsedMs)))"
@@ -179,6 +179,20 @@ final class CoordinatorBinder {
     static let bubbleStackOffset: CGFloat = 30
 
     // MARK: - ヘルパー
+
+    static func workingText(for toolName: String) -> String {
+        switch toolName {
+        case "Bash":      return "実行中..."
+        case "Read":      return "読んでる..."
+        case "Write":     return "書いてる..."
+        case "Edit":      return "直してる..."
+        case "Grep":      return "探してる..."
+        case "Glob":      return "ファイル探索..."
+        case "Agent":     return "調べてる..."
+        case "WebSearch": return "検索中..."
+        default:          return "作業中..."
+        }
+    }
 
     static func formatElapsedTime(_ ms: Int) -> String {
         let totalSeconds = ms / 1000

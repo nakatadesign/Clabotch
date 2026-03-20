@@ -82,7 +82,7 @@ final class AppDelegateCoordinatorTests: XCTestCase {
 
     func testBubbleTextThinking() {
         let binder = makeBinderWithNoSessions()
-        XCTAssertEqual(binder.bubbleText(for: .thinking), "考えてます...")
+        XCTAssertNil(binder.bubbleText(for: .thinking))
     }
 
     func testBubbleTextDoneWithTime() {
@@ -104,12 +104,12 @@ final class AppDelegateCoordinatorTests: XCTestCase {
 
     func testBubbleTextResponding() {
         let binder = makeBinderWithNoSessions()
-        XCTAssertEqual(binder.bubbleText(for: .responding), "返答中...")
+        XCTAssertEqual(binder.bubbleText(for: .responding), "作業中...")
     }
 
     func testBubbleTextWorking() {
         let binder = makeBinderWithNoSessions()
-        XCTAssertEqual(binder.bubbleText(for: .working(toolName: "Bash")), "実行中...(Bash)")
+        XCTAssertEqual(binder.bubbleText(for: .working(toolName: "Bash")), "実行中...")
     }
 
     func testBubbleTextIdleNil() {

@@ -110,9 +110,14 @@ final class CoordinatorIntegrationTests: XCTestCase {
     func testA1SessionStartSetsThinkingPhase() {
         stateMachine.handle(event: .sessionStart(sessionID: "s1"))
 
-        waitForCondition(description: "bubble shows thinking text") {
-            self.activeBubbleSpy.lastText == "考えてます..."
+        // thinking は吹き出しなし
+        let exp = expectation(description: "thinking phase set")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(self.stateMachine.displayPhase, .thinking)
+            XCTAssertNil(self.activeBubbleSpy.lastText)
+            exp.fulfill()
         }
+        wait(for: [exp], timeout: 1.0)
 
         XCTAssertEqual(blinkController.isBlinking, true)
         XCTAssertEqual(eyeView.faceColor, ClabotchEyeView.Palette.faceNormal)
@@ -125,7 +130,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
 
         waitForCondition(description: "bubble shows working text") {
-            self.activeBubbleSpy.lastText == "実行中...(Bash)"
+            self.activeBubbleSpy.lastText == "実行中..."
         }
     }
 
@@ -134,9 +139,13 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
         stateMachine.handle(event: .toolEnd(sessionID: "s1", toolName: "Bash", durationMs: 0, isError: false, errorMessage: nil))
 
-        waitForCondition(description: "bubble shows thinking text") {
-            self.activeBubbleSpy.lastText == "考えてます..."
+        // thinking は吹き出しなし → bubble dismiss
+        let exp = expectation(description: "thinking phase after tool_end")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(self.stateMachine.displayPhase, .thinking)
+            exp.fulfill()
         }
+        wait(for: [exp], timeout: 1.0)
     }
 
     func testA4SessionDoneWithElapsedTime() {
@@ -216,7 +225,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
 
         XCTAssertFalse(eyeView.showErrorX)
         XCTAssertEqual(eyeView.faceColor, ClabotchEyeView.Palette.faceNormal)
-        XCTAssertEqual(activeBubbleSpy.lastText, "考えてます...")
+        // thinking は吹き出しなし
     }
 
     // MARK: - C. Sleeping Flow
@@ -464,14 +473,15 @@ final class CoordinatorIntegrationTests: XCTestCase {
     }
 
     func testH2ForeignSessionStartUpdatesBubbleWithSuffix() {
-        // active session を確立
+        // active session を確立し working に遷移（thinking は吹き出しなし）
         stateMachine.handle(event: .sessionStart(sessionID: "s1"))
+        stateMachine.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
 
         // foreign session_start → セッション数変化で [+1] サフィックスが付加される
         stateMachine.handle(event: .sessionStart(sessionID: "s-foreign"))
 
         waitForCondition(description: "bubble updated with [+1] suffix") {
-            self.activeBubbleSpy.lastText == "考えてます... [+1]"
+            self.activeBubbleSpy.lastText == "実行中... [+1]"
         }
     }
 
@@ -490,10 +500,12 @@ final class CoordinatorIntegrationTests: XCTestCase {
     // MARK: - I. マルチセッション吹き出し表示
 
     func testI1SingleSessionBubbleTextHasNoSuffix() {
+        // working に遷移して吹き出しを出す（thinking は吹き出しなし）
         stateMachine.handle(event: .sessionStart(sessionID: "s1"))
+        stateMachine.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
 
-        waitForCondition(description: "bubble shows thinking text") {
-            self.activeBubbleSpy.lastText == "考えてます..."
+        waitForCondition(description: "bubble shows working text") {
+            self.activeBubbleSpy.lastText == "実行中..."
         }
     }
 
@@ -506,7 +518,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .toolStart(sessionID: "s2", toolName: "Bash"))
 
         waitForCondition(description: "bubble shows [+1] suffix") {
-            self.activeBubbleSpy.lastText == "実行中...(Bash) [+1]"
+            self.activeBubbleSpy.lastText == "実行中... [+1]"
         }
     }
 
@@ -532,7 +544,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .toolStart(sessionID: "s1", toolName: "Read"))
 
         waitForCondition(description: "bubble shows [+1]") {
-            self.activeBubbleSpy.lastText == "実行中...(Read) [+1]"
+            self.activeBubbleSpy.lastText == "読んでる... [+1]"
         }
 
         // s2 が done → session cleanup 後にサフィックスが消える
@@ -540,20 +552,22 @@ final class CoordinatorIntegrationTests: XCTestCase {
 
         // done セッションの cleanup（doneAutoTransitionDelay=0.3s）を待つ
         waitForCondition(description: "suffix disappears after session cleanup") {
-            self.activeBubbleSpy.lastText == "実行中...(Read)"
+            self.activeBubbleSpy.lastText == "読んでる..."
         }
     }
 
     func testI5DonePhaseWithMultiSessionsShowsSuffix() {
         stateMachine.handle(event: .sessionStart(sessionID: "s1"))
         stateMachine.handle(event: .sessionStart(sessionID: "s2"))
+        // s2 を working に遷移して吹き出しを出す（thinking は吹き出しなし）
+        stateMachine.handle(event: .toolStart(sessionID: "s2", toolName: "Bash"))
 
-        // s1 を done に → displayPhase は s2 の thinking（priority 2 < done 3）
+        // s1 を done に → displayPhase は s2 の working（priority 1 < done 4）
         stateMachine.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 5000))
 
-        // s2 は thinking, s1 は done（まだ cleanup 前）→ sessions.count=2
-        waitForCondition(description: "thinking with [+1] for done session") {
-            self.activeBubbleSpy.lastText == "考えてます... [+1]"
+        // s2 は working, s1 は done（まだ cleanup 前）→ sessions.count=2
+        waitForCondition(description: "working with [+1] for done session") {
+            self.activeBubbleSpy.lastText == "実行中... [+1]"
         }
     }
 
@@ -604,7 +618,9 @@ final class CoordinatorIntegrationTests: XCTestCase {
         }
 
         // 吹き出しが「返答中...」に切り替わっている
-        XCTAssertEqual(fastBubble.lastText, "返答中...")
+        // responding の吹き出しは「作業中...」
+        XCTAssertNotNil(fastBubble.lastText)
+        XCTAssertTrue(fastBubble.lastText?.contains("作業中") == true)
 
         // 実際の BlinkController の状態を検証（bind 経由の fan-out）
         XCTAssertTrue(localBC.isBlinking, "responding 時は blink が有効であるべき")
