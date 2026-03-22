@@ -140,13 +140,7 @@ clabotch/
 │       ├── GazeController.swift     # AX-based terminal tracking
 │       └── CoordinatorBinder.swift  # Wires StateMachine → UI
 ├── hooks/                  # Claude Code hook scripts (copy to ~/.claude/hooks/)
-├── docs/
-│   ├── ARCHITECTURE.md     # Architecture overview & rules
-│   ├── WORKFLOW.md         # Development workflow
-│   └── design/
-│       └── current/        # Design spec v11 (source of truth)
-├── CLAUDE.md               # Instructions for Claude Code agents
-└── AGENTS.md               # Instructions for Codex agents
+└── docs/                   # Screenshots and documentation
 ```
 
 ---
@@ -176,8 +170,8 @@ Run `pkill -9 -f Clabotch` before the test command. A running instance holds the
 
 ## Contributing
 
-Issues and pull requests are welcome.  
-Please read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) before making changes — the design spec v11 is the source of truth, and significant changes should be discussed first.
+Issues and pull requests are welcome.
+Please open an issue to discuss significant changes before submitting a PR.
 
 ```bash
 # Recommended pre-commit check

@@ -33,16 +33,22 @@ artifacts/
 # Release 配布物
 dist/
 
-# Claude Code local
-.claude/projects/
-.claude/*
-!.claude/settings.json
-!.claude/agents/
-!.claude/agents/**
-.claude/review-loop/
-!.totonoe/
-!.totonoe/**
-.totonoe/.DS_Store
-.totonoe/runtime/
-.claude/settings.local.json
-.claude/hooks/
+# Internal development files (local only, not published)
+.claude/
+.totonoe/
+CLAUDE.md
+CLAUDE.totonoe.template.md
+AGENTS.md
+AGENTS.totonoe.template.md
+HANDOVER.md
+docs/WORKFLOW.md
+docs/REVIEW_RULES.md
+docs/ARCHITECTURE.md
+docs/DISTRIBUTION.md
+docs/design/
+docs/exec-plans/
+public-repo-template/
+tasks/
+tests/
+scripts/
+.xcodegen.lock
