@@ -617,10 +617,8 @@ final class CoordinatorIntegrationTests: XCTestCase {
             fastSM.displayPhase == .responding
         }
 
-        // 吹き出しが「返答中...」に切り替わっている
-        // responding の吹き出しは「作業中...」
-        XCTAssertNotNil(fastBubble.lastText)
-        XCTAssertTrue(fastBubble.lastText?.contains("作業中") == true)
+        // responding の吹き出しが表示されている
+        XCTAssertEqual(fastBubble.lastText, L10n.bubbleResponding)
 
         // 実際の BlinkController の状態を検証（bind 経由の fan-out）
         XCTAssertTrue(localBC.isBlinking, "responding 時は blink が有効であるべき")

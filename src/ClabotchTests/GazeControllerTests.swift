@@ -317,9 +317,8 @@ final class GazeControllerQuantizeTests: XCTestCase {
     }
 
     func testQuantizeRightDown() {
-        // 画面中心より右、上部25%より下 → rightDown
-        // 画面: 3840x2160, 中心x=1920, 上部25%境界 y=1620
-        mockAX.terminalCenter = CGPoint(x: 2500, y: 800)
+        // 閾値（screenWidth * 0.6）を確実に超える x 座標 → rightDown
+        mockAX.terminalCenter = CGPoint(x: 10000, y: 800)
 
         sut.startPolling()
         let exp = expectation(description: "rightDown")
@@ -331,8 +330,8 @@ final class GazeControllerQuantizeTests: XCTestCase {
     }
 
     func testQuantizeLeftDown() {
-        // 画面中心より左、上部25%より下 → leftDown
-        mockAX.terminalCenter = CGPoint(x: 800, y: 800)
+        // 閾値（screenWidth * 0.6）を確実に下回る x 座標 → leftDown
+        mockAX.terminalCenter = CGPoint(x: 100, y: 800)
 
         sut.startPolling()
         let exp = expectation(description: "leftDown")
@@ -345,7 +344,7 @@ final class GazeControllerQuantizeTests: XCTestCase {
 
     func testQuantizeLeftHorizontal() {
         // 水平方向は廃止 → 画面上部でも左下に量子化される
-        mockAX.terminalCenter = CGPoint(x: 800, y: 1800)
+        mockAX.terminalCenter = CGPoint(x: 100, y: 1800)
 
         sut.startPolling()
         let exp = expectation(description: "left down")
@@ -358,7 +357,7 @@ final class GazeControllerQuantizeTests: XCTestCase {
 
     func testQuantizeRightHorizontal() {
         // 水平方向は廃止 → 画面上部でも右下に量子化される
-        mockAX.terminalCenter = CGPoint(x: 2500, y: 1800)
+        mockAX.terminalCenter = CGPoint(x: 10000, y: 1800)
 
         sut.startPolling()
         let exp = expectation(description: "right down")
