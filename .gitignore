@@ -41,12 +41,7 @@ CLAUDE.totonoe.template.md
 AGENTS.md
 AGENTS.totonoe.template.md
 HANDOVER.md
-docs/WORKFLOW.md
-docs/REVIEW_RULES.md
-docs/ARCHITECTURE.md
-docs/DISTRIBUTION.md
-docs/design/
-docs/exec-plans/
+docs/
 public-repo-template/
 tasks/
 tests/

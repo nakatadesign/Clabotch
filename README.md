@@ -8,7 +8,7 @@ Clabotch (クラボッチ) lives in your menu bar as a pixel-art character and r
 
 Inspired by two icons from different eras: the dot-art look and color palette of Clawd, Claude Code's terminal-native mascot, and the gaze of Eyeballs, the beloved 68K ClassicMacintosh desk accessory that watched from the Apple menu. Clabotch carries both forward — a tiny pair of eyes that knows what you're building.
 
-![Clabotch in menu bar](docs/screenshot.gif)
+![Clabotch in menu bar](screenshot.gif)
 
 ---
 
