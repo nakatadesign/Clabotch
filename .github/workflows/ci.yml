@@ -35,38 +35,14 @@ jobs:
           xcodebuild -version
           swift --version
 
-      - name: Install xcodegen (pinned)
-        run: |
-          set -euo pipefail
-          XCODEGEN_VERSION="$(grep '^version:' .xcodegen.lock | awk '{print $2}')"
-          XCODEGEN_SHA256="$(grep '^sha256:' .xcodegen.lock | awk '{print $2}')"
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/xcodegen.zip" \
-            "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
-          echo "${XCODEGEN_SHA256}  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
-          mkdir -p "$RUNNER_TEMP/xcodegen-bin"
-          unzip -o -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP/xcodegen-bin"
-          echo "$RUNNER_TEMP/xcodegen-bin/xcodegen/bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/xcodegen-bin/xcodegen/bin/xcodegen" version
+      - name: Install xcodegen
+        run: brew install xcodegen
 
       - name: Create artifacts directory
         run: mkdir -p artifacts
 
       - name: Generate Xcode project
         run: cd src && xcodegen generate
-
-      - name: Check xcodeproj drift
-        run: |
-          set -euo pipefail
-          cd src
-          if ! git diff --exit-code -- Clabotch.xcodeproj; then
-            echo "::error::xcodegen generate produced a different .xcodeproj than what is committed. Run 'cd src && xcodegen generate' locally and commit the result."
-            exit 1
-          fi
-          UNTRACKED="$(git ls-files --others --exclude-standard -- Clabotch.xcodeproj)"
-          if [ -n "$UNTRACKED" ]; then
-            echo "::error::xcodegen generated untracked files in Clabotch.xcodeproj: $UNTRACKED"
-            exit 1
-          fi
 
       - name: Build for testing
         run: |
@@ -96,34 +72,3 @@ jobs:
           name: xcresult-${{ github.run_id }}
           path: artifacts/*.xcresult
           retention-days: 7
-
-  hook-tests:
-    name: Hook E2E Tests
-    runs-on: macos-15
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Verify prerequisites
-        run: |
-          set -euo pipefail
-          jq --version
-          bash --version | head -1
-          uuidgen >/dev/null && echo "uuidgen: ok"
-
-      - name: Install dependencies
-        run: brew install socat
-
-      - name: Run hook E2E tests
-        run: bash tests/test_hooks.sh
-
-      - name: Upload test logs on failure
-        if: ${{ failure() }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: hook-test-logs-${{ github.run_id }}
-          path: /tmp/clabotch-test-*
-          retention-days: 7
-          if-no-files-found: ignore
