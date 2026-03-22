@@ -87,29 +87,41 @@ final class AppDelegateCoordinatorTests: XCTestCase {
 
     func testBubbleTextDoneWithTime() {
         let binder = makeBinderWithNoSessions()
-        XCTAssertEqual(binder.bubbleText(for: .done(elapsedMs: 222000)), "完了！(3分42秒)")
+        XCTAssertEqual(
+            binder.bubbleText(for: .done(elapsedMs: 222000)),
+            L10n.bubbleDone(elapsedText: L10n.elapsedTime(minutes: 3, seconds: 42))
+        )
     }
 
     func testBubbleTextDoneNoTime() {
         let binder = makeBinderWithNoSessions()
-        XCTAssertEqual(binder.bubbleText(for: .done(elapsedMs: 0)), "完了！")
+        XCTAssertEqual(binder.bubbleText(for: .done(elapsedMs: 0)), L10n.bubbleDone)
     }
 
     func testBubbleTextErrorFixedMessage() {
         let binder = makeBinderWithNoSessions()
         // v11 §6: error は固定文言。error_message は表示しない (§13.6)
-        XCTAssertEqual(binder.bubbleText(for: .error(toolName: "Bash", message: "some detail")), "エラーが出ました…")
-        XCTAssertEqual(binder.bubbleText(for: .error(toolName: "Bash", message: nil)), "エラーが出ました…")
+        XCTAssertEqual(binder.bubbleText(for: .error(toolName: "Bash", message: "some detail")), L10n.bubbleError)
+        XCTAssertEqual(binder.bubbleText(for: .error(toolName: "Bash", message: nil)), L10n.bubbleError)
     }
 
     func testBubbleTextResponding() {
         let binder = makeBinderWithNoSessions()
-        XCTAssertEqual(binder.bubbleText(for: .responding), "作業中...")
+        XCTAssertEqual(binder.bubbleText(for: .responding), L10n.bubbleResponding)
     }
 
     func testBubbleTextWorking() {
         let binder = makeBinderWithNoSessions()
-        XCTAssertEqual(binder.bubbleText(for: .working(toolName: "Bash")), "実行中...")
+        // ツール別吹き出し文言（CoordinatorBinder.workingText が source of truth）
+        XCTAssertEqual(binder.bubbleText(for: .working(toolName: "Bash")), L10n.workingText(for: "Bash"))
+        XCTAssertEqual(binder.bubbleText(for: .working(toolName: "Read")), L10n.workingText(for: "Read"))
+        XCTAssertEqual(binder.bubbleText(for: .working(toolName: "Write")), L10n.workingText(for: "Write"))
+        XCTAssertEqual(binder.bubbleText(for: .working(toolName: "Edit")), L10n.workingText(for: "Edit"))
+        XCTAssertEqual(binder.bubbleText(for: .working(toolName: "Grep")), L10n.workingText(for: "Grep"))
+        XCTAssertEqual(binder.bubbleText(for: .working(toolName: "Glob")), L10n.workingText(for: "Glob"))
+        XCTAssertEqual(binder.bubbleText(for: .working(toolName: "Agent")), L10n.workingText(for: "Agent"))
+        XCTAssertEqual(binder.bubbleText(for: .working(toolName: "WebSearch")), L10n.workingText(for: "WebSearch"))
+        XCTAssertEqual(binder.bubbleText(for: .working(toolName: "UnknownTool")), L10n.workingText(for: "UnknownTool"))
     }
 
     func testBubbleTextIdleNil() {
@@ -141,9 +153,9 @@ final class AppDelegateCoordinatorTests: XCTestCase {
     // MARK: - formatElapsedTime
 
     func testFormatElapsedTime() {
-        XCTAssertEqual(CoordinatorBinder.formatElapsedTime(222000), "3分42秒")
-        XCTAssertEqual(CoordinatorBinder.formatElapsedTime(5000), "5秒")
-        XCTAssertEqual(CoordinatorBinder.formatElapsedTime(60000), "1分0秒")
-        XCTAssertEqual(CoordinatorBinder.formatElapsedTime(0), "0秒")
+        XCTAssertEqual(CoordinatorBinder.formatElapsedTime(222000), L10n.elapsedTime(minutes: 3, seconds: 42))
+        XCTAssertEqual(CoordinatorBinder.formatElapsedTime(5000), L10n.elapsedTime(minutes: 0, seconds: 5))
+        XCTAssertEqual(CoordinatorBinder.formatElapsedTime(60000), L10n.elapsedTime(minutes: 1, seconds: 0))
+        XCTAssertEqual(CoordinatorBinder.formatElapsedTime(0), L10n.elapsedTime(minutes: 0, seconds: 0))
     }
 }

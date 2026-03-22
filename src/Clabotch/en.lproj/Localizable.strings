@@ -1,0 +1,45 @@
+"menu.settings" = "Settings...";
+"menu.quit" = "Quit Clabotch";
+
+"onboarding.title" = "Welcome to Clabotch";
+"onboarding.message" = "Clabotch watches over Claude Code's work from your menu bar.\n\nAccessibility permission is required for gaze tracking.\nMost features still work without it.";
+"onboarding.allow" = "Allow";
+"common.later" = "Later";
+
+"alert.accessibility_required.title" = "Accessibility Permission Required";
+"alert.accessibility_required.message" = "Accessibility permission is required for gaze tracking.\n\nClick \"Open System Settings\" and add Clabotch to the list, then enable it.\nIf it is already enabled, turning it off and on again may help.";
+"alert.accessibility_required.open_settings" = "Open System Settings";
+
+"settings.window.title" = "Clabotch Settings";
+"settings.sleep_timeout" = "Sleep after:";
+"settings.animation_speed" = "Animation speed:";
+"settings.launch_at_login" = "Launch at login";
+"settings.accessibility" = "Gaze tracking:";
+"settings.accessibility.open_settings" = "Review Accessibility Settings...";
+"settings.accessibility.enabled" = "Enabled";
+"settings.accessibility.not_granted" = "Not granted";
+"settings.sleep_timeout.one_minute" = "1 min";
+"settings.sleep_timeout.five_minutes_default" = "5 min (default)";
+"settings.sleep_timeout.ten_minutes" = "10 min";
+"settings.sleep_timeout.disabled" = "Disabled";
+"settings.animation_speed.slow" = "Slow";
+"settings.animation_speed.normal" = "Normal";
+"settings.animation_speed.fast" = "Fast";
+
+"bubble.accessibility_enabled" = "Gaze tracking is now enabled";
+"bubble.foreign_session_done" = "Another session finished (%@)";
+"bubble.responding" = "Working...";
+"bubble.done_with_time" = "Done! (%@)";
+"bubble.done" = "Done!";
+"bubble.error" = "An error occurred…";
+"bubble.working.bash" = "Running command...";
+"bubble.working.read" = "Reading...";
+"bubble.working.write" = "Writing...";
+"bubble.working.edit" = "Editing...";
+"bubble.working.grep" = "Searching...";
+"bubble.working.glob" = "Browsing files...";
+"bubble.working.agent" = "Researching...";
+"bubble.working.websearch" = "Searching web...";
+"bubble.working.default" = "Working...";
+"bubble.elapsed.minutes_seconds" = "%d min %d sec";
+"bubble.elapsed.seconds" = "%d sec";

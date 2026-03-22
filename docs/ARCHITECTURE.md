@@ -17,10 +17,19 @@ clabotch/
 ├── CLAUDE.md                    # Claude Code エントリポイント
 ├── AGENTS.md                    # Codex エントリポイント
 ├── HANDOVER.md                  # セッション引き継ぎ
+├── .claude/
+│   ├── settings.json            # Claude Code の設定・permission ルール
+│   └── agents/                  # Claude/Codex 向け agent 定義
+├── .totonoe/
+│   ├── bin/                     # runtime shell scripts
+│   ├── schemas/                 # reviewer/judge/knowledge schema
+│   ├── runtime/                 # job state / rounds / events
+│   ├── README.md
+│   └── RUNBOOK.md
 ├── docs/
-│   ├── WORKFLOW.md              # 作業フロー・Codex連携ループ
+│   ├── WORKFLOW.md              # 作業フロー
 │   ├── ARCHITECTURE.md          # 本ファイル
-│   ├── REVIEW_RULES.md          # Codexレビュールール
+│   ├── REVIEW_RULES.md          # レビュールール
 │   ├── design/
 │   │   ├── current/
 │   │   │   └── clabotch_design_doc_v11.md  # v11最終設計書（変更禁止）
@@ -29,7 +38,7 @@ clabotch/
 │   └── exec-plans/
 │       ├── active/              # 進行中の実装計画
 │       └── completed/           # 完了した実装計画
-├── src/                         # Xcodeプロジェクト（実装フェーズで作成）
+├── src/                         # Xcodeプロジェクト
 ├── hooks/                       # ~/.claude/hooks/ の作業コピー
 ├── tests/                       # テスト・疎通確認スクリプト
 └── artifacts/                   # ビルド成果物・スクリーンショット

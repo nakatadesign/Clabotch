@@ -77,11 +77,11 @@ final class SettingsWindowControllerTests: XCTestCase {
     }
 
     func testAnimSpeedPopupReflectsCurrentSetting() {
-        store.animationSpeedPreset = 2  // 速い
+        store.animationSpeedPreset = 2  // fast
         let wc = SettingsWindowController(settingsStore: store)
         wc.windowFactory = { _ in nil }
         wc.showWindow()
-        XCTAssertEqual(wc.animSpeedPopup?.selectedItem?.title, "速い")
+        XCTAssertEqual(wc.animSpeedPopup?.selectedItem?.title, L10n.animationSpeedFast)
     }
 }
 

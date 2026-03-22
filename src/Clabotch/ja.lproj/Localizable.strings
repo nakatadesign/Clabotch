@@ -1,0 +1,45 @@
+"menu.settings" = "設定...";
+"menu.quit" = "Clabotch を終了";
+
+"onboarding.title" = "Clabotch へようこそ";
+"onboarding.message" = "Claude Code の作業をメニューバーで見守ります。\n\n視線追跡機能を使うにはアクセシビリティの許可が必要です。\n※ 許可しなくても機能の95%%は動作します。";
+"onboarding.allow" = "許可する";
+"common.later" = "後で";
+
+"alert.accessibility_required.title" = "アクセシビリティの許可が必要です";
+"alert.accessibility_required.message" = "視線追跡にはアクセシビリティの許可が必要です。\n\n「システム設定を開く」を押して、一覧に Clabotch を追加しチェックを入れてください。\n既にチェックが入っている場合は、一度外してから再度入れ直すと改善する場合があります。";
+"alert.accessibility_required.open_settings" = "システム設定を開く";
+
+"settings.window.title" = "Clabotch 設定";
+"settings.sleep_timeout" = "スリープまで:";
+"settings.animation_speed" = "アニメーション速度:";
+"settings.launch_at_login" = "ログイン時に起動";
+"settings.accessibility" = "視線追跡:";
+"settings.accessibility.open_settings" = "アクセシビリティ設定を確認...";
+"settings.accessibility.enabled" = "有効";
+"settings.accessibility.not_granted" = "未許可";
+"settings.sleep_timeout.one_minute" = "1分";
+"settings.sleep_timeout.five_minutes_default" = "5分（デフォルト）";
+"settings.sleep_timeout.ten_minutes" = "10分";
+"settings.sleep_timeout.disabled" = "無効";
+"settings.animation_speed.slow" = "ゆっくり";
+"settings.animation_speed.normal" = "標準";
+"settings.animation_speed.fast" = "速い";
+
+"bubble.accessibility_enabled" = "視線追跡が有効になりました";
+"bubble.foreign_session_done" = "別セッション完了 (%@)";
+"bubble.responding" = "作業中...";
+"bubble.done_with_time" = "完了！(%@)";
+"bubble.done" = "完了！";
+"bubble.error" = "エラーが出ました…";
+"bubble.working.bash" = "実行します...";
+"bubble.working.read" = "読み込み中...";
+"bubble.working.write" = "書き込み中...";
+"bubble.working.edit" = "修正中...";
+"bubble.working.grep" = "探してます...";
+"bubble.working.glob" = "ファイル探索...";
+"bubble.working.agent" = "調べてます...";
+"bubble.working.websearch" = "検索中...";
+"bubble.working.default" = "作業中...";
+"bubble.elapsed.minutes_seconds" = "%d分%d秒";
+"bubble.elapsed.seconds" = "%d秒";

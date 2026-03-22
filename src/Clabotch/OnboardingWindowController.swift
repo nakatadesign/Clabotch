@@ -23,20 +23,15 @@ final class OnboardingWindowController {
     /// production ではデフォルトの NSAlert.runModal() を使用。
     static var alertPresenter: () -> NSApplication.ModalResponse = {
         let alert = NSAlert()
-        alert.messageText = "Clabotch へようこそ"
-        alert.informativeText = """
-            Claude Code の作業をメニューバーで見守ります。
-
-            視線追跡機能を使うにはアクセシビリティの許可が必要です。
-            ※ 許可しなくても機能の95%は動作します。
-            """
+        alert.messageText = L10n.onboardingTitle
+        alert.informativeText = L10n.onboardingMessage
         alert.alertStyle = .informational
         // LSUIElement アプリはアイコンが自動設定されないため明示指定
         alert.icon = NSApp.applicationIconImage
 
         // ボタン追加（先に追加したものが右側 = デフォルト）
-        alert.addButton(withTitle: "許可する")
-        alert.addButton(withTitle: "後で")
+        alert.addButton(withTitle: L10n.onboardingAllow)
+        alert.addButton(withTitle: L10n.commonLater)
 
         return alert.runModal()
     }

@@ -94,7 +94,7 @@ final class CoordinatorBinder {
             self.onAccessibilityStatusChanged?(status)
             guard status == .granted else { return }
             if let anchor = self.anchorProvider() {
-                self.ephemeralBubble.show(text: "視線追跡が有効になりました", anchor: anchor, duration: 3.0)
+                self.ephemeralBubble.show(text: L10n.bubbleAccessibilityEnabled, anchor: anchor, duration: 3.0)
             }
         }
 
@@ -106,7 +106,7 @@ final class CoordinatorBinder {
         stateMachine.onEphemeralDone = { [weak self] elapsedMs in
             guard let self else { return }
             let text = Self.formatElapsedTime(elapsedMs)
-            let display = "別セッション完了 (\(text))"
+            let display = L10n.bubbleForeignSessionDone(elapsedText: text)
             if var anchor = self.anchorProvider() {
                 // activeBubble 表示中なら下にずらして重なりを回避
                 if self.activeBubble.isShowing {
@@ -150,17 +150,17 @@ final class CoordinatorBinder {
         case .thinking:
             base = nil
         case .responding:
-            base = "作業中..."
+            base = L10n.bubbleResponding
         case .working(let toolName):
             base = Self.workingText(for: toolName)
         case .done(let elapsedMs):
             if elapsedMs > 0 {
-                base = "完了！(\(Self.formatElapsedTime(elapsedMs)))"
+                base = L10n.bubbleDone(elapsedText: Self.formatElapsedTime(elapsedMs))
             } else {
-                base = "完了！"
+                base = L10n.bubbleDone
             }
         case .error:
-            base = "エラーが出ました…"  // v11 §6 固定文言。詳細 error_message は v1.0+ (§13.6)
+            base = L10n.bubbleError  // v11 §6 固定文言。詳細 error_message は v1.0+ (§13.6)
         case .idle, .sleeping:
             return nil
         }
@@ -181,27 +181,13 @@ final class CoordinatorBinder {
     // MARK: - ヘルパー
 
     static func workingText(for toolName: String) -> String {
-        switch toolName {
-        case "Bash":      return "実行します..."
-        case "Read":      return "読み込み中..."
-        case "Write":     return "書き込み中..."
-        case "Edit":      return "修正中..."
-        case "Grep":      return "探してます..."
-        case "Glob":      return "ファイル探索..."
-        case "Agent":     return "調べてます..."
-        case "WebSearch": return "検索中..."
-        default:          return "作業中..."
-        }
+        L10n.workingText(for: toolName)
     }
 
     static func formatElapsedTime(_ ms: Int) -> String {
         let totalSeconds = ms / 1000
         let minutes = totalSeconds / 60
         let seconds = totalSeconds % 60
-        if minutes > 0 {
-            return "\(minutes)分\(seconds)秒"
-        } else {
-            return "\(seconds)秒"
-        }
+        return L10n.elapsedTime(minutes: minutes, seconds: seconds)
     }
 }

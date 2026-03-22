@@ -1,118 +1,198 @@
 # Clabotch
 
-Clabotch（クラボッチ）は、macOS メニューバーに常駐して Claude Code の作業状態を表示するマスコットアプリです。
+**A tiny macOS menu bar mascot that watches over your Claude Code sessions.**
 
-- PNG 素材ゼロ
-- 全フレームを Swift コードで描画
-- 22x14px のドット絵アニメーション
-- Claude Code hooks を Unix domain socket で受信
+Clabotch (クラボッチ) lives in your menu bar as a 22×14 px pixel-art character and reflects the real-time state of [Claude Code](https://claude.ai/code) — thinking, running tools, responding, done, or sleeping. No PNGs. Every frame is drawn in pure Swift.
 
-現在は設計完了に加え、Claude Code controller + Codex reviewer + Codex supervisor(judge) で回す review-loop 基盤を同梱しています。
+<!-- Screenshot / GIF: replace the placeholder below with an actual demo -->
+<!--
+![Clabotch demo](docs/demo.gif)
+-->
 
-## Source of Truth
+> 📸 *Screenshots and demo GIF coming soon.*
 
-実装判断の正典は以下です。
+---
 
-- `docs/design/current/clabotch_design_doc_v11.md`
+## What it does
 
-実装前に最低限読むファイル:
+| Claude Code state | Clabotch |
+|-------------------|----------|
+| Idle | Eyes resting, gaze down-right |
+| Thinking | Still face, gentle nod |
+| Responding | Eyes scanning, *"Working…"* bubble |
+| Running a tool | Tool-specific bubble (e.g. *"Running command…"* for Bash) |
+| Done | Rainbow spin + jump + *"Done! (3 min 42 sec)"* |
+| Error | Shake animation + *"An error occurred…"* |
+| Sleeping | Eyes closed |
 
-- `CLAUDE.md`
-- `docs/WORKFLOW.md`
-- `docs/ARCHITECTURE.md`
-- `HANDOVER.md`
+> 💬 Bubble text is localised. English and Japanese are supported out of the box; English is the fallback.
 
-Codex レビュー観点は以下です。
+Events arrive via Claude Code hooks → Unix domain socket → `HookServer` → `StateMachine`. No polling of Claude Code internals, no network calls.
 
-- `AGENTS.md`
-- `docs/REVIEW_RULES.md`
+---
 
-## Repository Layout
+## Requirements
 
-```text
-clabotch/
-├── README.md
-├── CLAUDE.md
-├── AGENTS.md
-├── HANDOVER.md
-├── .claude/
-│   ├── settings.json
-│   ├── agents/
-│   └── review-loop/
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── REVIEW_RULES.md
-│   ├── WORKFLOW.md
-│   ├── design/
-│   │   ├── current/
-│   │   ├── archive/
-│   │   └── patches/
-│   └── exec-plans/
-│       ├── active/
-│       └── completed/
-├── hooks/
-├── src/
-├── tests/
-└── artifacts/
+- macOS 13 Ventura or later
+- Xcode 15+ / Swift 5.9+
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`)
+- `jq` (`brew install jq`) — used by the hook scripts
+- [Claude Code](https://claude.ai/code) with hooks support
+
+---
+
+## Quick Start
+
+### 1. Build
+
+```bash
+git clone https://github.com/nakatadesign/clabotch.git
+cd clabotch/src
+xcodegen generate
+xcodebuild build \
+  -project Clabotch.xcodeproj \
+  -scheme Clabotch \
+  -destination 'platform=macOS' \
+  -derivedDataPath build
 ```
 
-## Key Directories
+### 2. Install
 
-- `docs/design/current/`: 現在の正本設計書
-- `docs/design/archive/`: 過去バージョンの統合設計書
-- `docs/design/patches/`: 設計追補・差分パッチ
-- `docs/exec-plans/`: 実装計画
-- `.claude/agents/`: Claude Code 用の役割別エージェント定義
-- `.claude/review-loop/`: Claude controller / Codex reviewer / Codex supervisor の運用一式
-- `hooks/`: `~/.claude/hooks/` に配置する hook の作業コピー
-- `src/`: アプリ本体
-- `tests/`: 疎通確認・テスト
-- `artifacts/`: ビルド成果物、ログ、スクリーンショット
+```bash
+cp -R build/Build/Products/Debug/Clabotch.app /Applications/
+open /Applications/Clabotch.app
+```
 
-## AI Working Conventions
+On first launch, Clabotch will ask for **Accessibility permission** (required for the gaze-tracking feature that follows your terminal window). The mascot works without it — you'll just get a fixed gaze.
 
-- Claude Code の入口: `CLAUDE.md`
-- Codex の入口: `AGENTS.md`
-- review-loop controller/supervisor 手順: `.claude/review-loop/README.md`, `.claude/review-loop/RUNBOOK.md`
-- `.claude/settings.json` で team/permission 設定を管理
-- `.claude/agents/` で `swift-engineer` `hook-engineer` `reviewer` `spec-keeper` を定義
+### 3. Connect Claude Code hooks
 
-## Review Loop
+Copy the hook scripts to your global Claude Code hooks directory:
 
-review-loop は Claude Code を controller、Codex を reviewer と supervisor に分離して shell script で進行させる仕組みです。
+```bash
+mkdir -p ~/.claude/hooks
+cp hooks/*.sh ~/.claude/hooks/
+chmod +x ~/.claude/hooks/*.sh
+```
 
-- ランタイム操作は `.claude/review-loop/bin/*.sh` のみ
-- reviewer は read-only review のみ
-- judge は `.claude/review-loop/SUPERVISOR.md` に従って `fix / continue / done / human` を返す
-- 成果物は `.claude/review-loop/runtime/<job>/` に保存される
+Then add the following entries to `~/.claude/settings.json`:
 
-開始手順は [.claude/review-loop/README.md](/Users/nakata/Claude/clabotch/.claude/review-loop/README.md) と [.claude/review-loop/RUNBOOK.md](/Users/nakata/Claude/clabotch/.claude/review-loop/RUNBOOK.md) を参照してください。
+```json
+{
+  "hooks": {
+    "PreToolUse":          [{ "command": "~/.claude/hooks/clabotch_pre_tool.sh" }],
+    "PostToolUse":         [{ "command": "~/.claude/hooks/clabotch_post_tool.sh" }],
+    "PostToolUseFailure":  [{ "command": "~/.claude/hooks/clabotch_post_tool_failure.sh" }],
+    "Stop":                [{ "command": "~/.claude/hooks/clabotch_stop.sh" }]
+  }
+}
+```
 
-## Planned Architecture
+Restart Claude Code. Clabotch should spring to life the next time Claude starts working.
 
-```text
+---
+
+## How it works
+
+```
 Claude Code hooks (stdin JSON)
-  -> Unix domain socket ($TMPDIR/clabotch.sock)
-  -> HookServer
-  -> LineBufferedEventDecoder
-  -> EventParser
-  -> EventDeduplicator
-  -> StateMachine
-  -> Menu bar mascot UI
+  └─ Unix domain socket  ($TMPDIR/clabotch/clabotch.sock)
+       └─ HookServer
+            └─ LineBufferedEventDecoder  (per-connection)
+                 └─ EventParser  (pure function)
+                      └─ DispatchQueue.main
+                           ├─ EventDeduplicator
+                           └─ StateMachine
+                                ├─ ClabotchEyeView   — pixel-art face, drawn in Swift
+                                ├─ BlinkController   — randomised blink timer
+                                ├─ GazeController    — tracks your terminal window via AX API
+                                └─ BubbleWindow      — speech-bubble overlay
 ```
 
-詳細は `docs/ARCHITECTURE.md` と設計書 v11 を参照してください。
+Zero PNG assets. The 14-frame animation is rendered entirely with Core Graphics at runtime.  
+Thread model: all UI and state updates are confined to the main thread; `LineBufferedEventDecoder` runs on a per-connection serial queue.
 
-## Setup Notes
+---
 
-- 想定環境: macOS 13+, Swift 5.9+
-- hook スクリプトは `jq` 前提
-- `hooks/` は作業用。実運用時は `~/.claude/hooks/` へ配置
-- 実装前に hook payload とソケット疎通を確認する
+## Running tests
 
-## Current Status
+```bash
+# Kill any running instance first (HookServer socket conflict)
+pkill -9 -f Clabotch; sleep 2
 
-- 設計書 v11 まで統合済み
-- ディレクトリ構成整理済み
-- Claude/Codex 用ドキュメント整備済み
-- 次の着手は hook 疎通テストと Xcode プロジェクト作成
+cd src
+xcodebuild test \
+  -project Clabotch.xcodeproj \
+  -scheme Clabotch \
+  -destination 'platform=macOS' \
+  -derivedDataPath build \
+  2>&1 | tail -30
+```
+
+Expected: **361 tests — 360 passed, 1 skipped**.
+
+---
+
+## Project layout
+
+```
+clabotch/
+├── src/                    # Xcode project (Swift, AppKit)
+│   └── Clabotch/           # App source
+│       ├── ClabotchEyeView.swift    # Core pixel-art renderer
+│       ├── StateMachine.swift       # Phase transitions
+│       ├── HookServer.swift         # Unix domain socket server
+│       ├── GazeController.swift     # AX-based terminal tracking
+│       └── CoordinatorBinder.swift  # Wires StateMachine → UI
+├── hooks/                  # Claude Code hook scripts (copy to ~/.claude/hooks/)
+├── docs/
+│   ├── ARCHITECTURE.md     # Architecture overview & rules
+│   ├── WORKFLOW.md         # Development workflow
+│   └── design/
+│       └── current/        # Design spec v11 (source of truth)
+├── CLAUDE.md               # Instructions for Claude Code agents
+└── AGENTS.md               # Instructions for Codex agents
+```
+
+---
+
+## Settings
+
+Launch the app's **Settings** panel (⌘,) to configure:
+
+- **Animation speed** — adjust the playback rate of all animations
+- **Launch at login** — start Clabotch automatically on login
+- **Accessibility status** — shows whether gaze-tracking is active
+
+---
+
+## Troubleshooting
+
+**Clabotch doesn't react to Claude Code**  
+Check that the hooks are installed and executable (`ls -la ~/.claude/hooks/`), and that the four entries appear in `~/.claude/settings.json`.
+
+**Gaze tracking not working**  
+Open *System Settings → Privacy & Security → Accessibility* and make sure Clabotch is listed and checked. If it appears greyed out or missing, remove the entry and re-grant permission from the onboarding dialog.
+
+**Tests failing with "address already in use"**  
+Run `pkill -9 -f Clabotch` before the test command. A running instance holds the socket.
+
+---
+
+## Contributing
+
+Issues and pull requests are welcome.  
+Please read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) before making changes — the design spec v11 is the source of truth, and significant changes should be discussed first.
+
+```bash
+# Recommended pre-commit check
+cd src && pkill -9 -f Clabotch; sleep 1 && \
+  xcodebuild test -project Clabotch.xcodeproj -scheme Clabotch \
+    -destination 'platform=macOS' -derivedDataPath build 2>&1 | tail -10
+```
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).

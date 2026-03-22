@@ -10,6 +10,8 @@
 		031195A51E4DEBCCCE79D315 /* ClabotchEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B07355B60F006A885B5E7A3 /* ClabotchEvent.swift */; };
 		05865EE9B15BE40CD15478B3 /* TestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE8769A4983A7A928F5B17BD /* TestHelpers.swift */; };
 		08E6A679B3A8F66FECD7D083 /* LaunchAtLoginManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C61BA4CFA929F71B495DFCB /* LaunchAtLoginManager.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40516273849A5B6C7 /* L10n.swift */; };
+		B1C2D3E4F5061728394A5B6C /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = F102132435465768798A9BAC /* Localizable.strings */; };
 		0CB9227D5E66E31C3F2E97ED /* MockProviders.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD17A2B7DC6C1976827DE887 /* MockProviders.swift */; };
 		0DAA12FDCC0C41D7165D1135 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7EE57E153DC91A088C8A04A /* AppDelegate.swift */; };
 		0FD047C1B96B55A730D81D10 /* BubbleWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3CC2C07B97752CF8C9EAB3 /* BubbleWindow.swift */; };
@@ -76,6 +78,9 @@
 		608C9DD4F8FDEC404C5D6227 /* EventParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventParserTests.swift; sourceTree = "<group>"; };
 		67CD365506A52BDFDBB81D02 /* Clabotch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Clabotch.entitlements; sourceTree = "<group>"; };
 		6C61BA4CFA929F71B495DFCB /* LaunchAtLoginManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLoginManager.swift; sourceTree = "<group>"; };
+		C1D2E3F40516273849A5B6C7 /* L10n.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
+		D1E2F30415263748596A7B8C /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		E1F2031425364758697A8B9C /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		7E3CC2C07B97752CF8C9EAB3 /* BubbleWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleWindow.swift; sourceTree = "<group>"; };
 		7F9FD592866F45EEB93DB3CC /* CoordinatorBinder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinatorBinder.swift; sourceTree = "<group>"; };
 		7FA31511CD3A5A9DEE74A907 /* SettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStoreTests.swift; sourceTree = "<group>"; };
@@ -130,6 +135,8 @@
 				A076E8747B07F4A438A5A17B /* GazeTypes.swift */,
 				D6D641782D88ED126B539ECC /* HookServer.swift */,
 				6C61BA4CFA929F71B495DFCB /* LaunchAtLoginManager.swift */,
+				C1D2E3F40516273849A5B6C7 /* L10n.swift */,
+				F102132435465768798A9BAC /* Localizable.strings */,
 				223AA7DF7008B6A77962527B /* LineBufferedEventDecoder.swift */,
 				AB06693ED6AB5DBC4E53A91D /* MascotPhase.swift */,
 				C871AEED2A335D6329E36B10 /* OnboardingWindowController.swift */,
@@ -187,6 +194,18 @@
 		};
 /* End PBXGroup section */
 
+/* Begin PBXVariantGroup section */
+		F102132435465768798A9BAC /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				D1E2F30415263748596A7B8C /* en */,
+				E1F2031425364758697A8B9C /* ja */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
 /* Begin PBXNativeTarget section */
 		6207F368FFD9EF6833727F1D /* Clabotch */ = {
 			isa = PBXNativeTarget;
@@ -241,6 +260,7 @@
 			knownRegions = (
 				Base,
 				en,
+				ja,
 			);
 			mainGroup = DC1A47DA3FF34431DDF19396;
 			minimizedProjectReferenceProxies = 1;
@@ -260,6 +280,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B1C2D3E4F5061728394A5B6C /* Localizable.strings in Resources */,
 				49949F4CD29907A86FD445E3 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -286,6 +307,7 @@
 				5A73AA822128B508F58B2B27 /* GazeTypes.swift in Sources */,
 				4733B842423CC2C183621E54 /* HookServer.swift in Sources */,
 				08E6A679B3A8F66FECD7D083 /* LaunchAtLoginManager.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* L10n.swift in Sources */,
 				15521049195B7B05052C8B8A /* LineBufferedEventDecoder.swift in Sources */,
 				51E4DD78AA01757BCDBBBAF0 /* MascotPhase.swift in Sources */,
 				7132669EFA6004408E964579 /* OnboardingWindowController.swift in Sources */,

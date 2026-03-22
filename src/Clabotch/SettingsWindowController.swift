@@ -15,7 +15,7 @@ final class SettingsWindowController: NSObject {
             backing: .buffered,
             defer: false
         )
-        window.title = "Clabotch 設定"
+        window.title = L10n.settingsWindowTitle
         window.contentView = contentView
         window.center()
         window.isReleasedWhenClosed = false
@@ -121,7 +121,7 @@ final class SettingsWindowController: NSObject {
         row.orientation = .horizontal
         row.spacing = 8
 
-        let label = NSTextField(labelWithString: "スリープまで:")
+        let label = NSTextField(labelWithString: L10n.settingsSleepTimeout)
         label.font = .systemFont(ofSize: 13)
 
         let popup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -158,7 +158,7 @@ final class SettingsWindowController: NSObject {
         row.orientation = .horizontal
         row.spacing = 8
 
-        let label = NSTextField(labelWithString: "アニメーション速度:")
+        let label = NSTextField(labelWithString: L10n.settingsAnimationSpeed)
         label.font = .systemFont(ofSize: 13)
 
         let popup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -191,7 +191,7 @@ final class SettingsWindowController: NSObject {
     // MARK: - ログイン時自動起動
 
     private func buildLaunchAtLoginRow() -> NSView {
-        let checkbox = NSButton(checkboxWithTitle: "ログイン時に起動", target: self, action: #selector(launchAtLoginChanged(_:)))
+        let checkbox = NSButton(checkboxWithTitle: L10n.settingsLaunchAtLogin, target: self, action: #selector(launchAtLoginChanged(_:)))
         checkbox.font = .systemFont(ofSize: 13)
         checkbox.state = launchAtLogin.isEnabled ? .on : .off
         launchAtLoginCheckbox = checkbox
@@ -211,7 +211,7 @@ final class SettingsWindowController: NSObject {
         statusRow.orientation = .horizontal
         statusRow.spacing = 6
 
-        let label = NSTextField(labelWithString: "視線追跡:")
+        let label = NSTextField(labelWithString: L10n.settingsAccessibility)
         label.font = .systemFont(ofSize: 13)
 
         let status = NSTextField(labelWithString: axStatusText())
@@ -223,7 +223,7 @@ final class SettingsWindowController: NSObject {
         row.addArrangedSubview(statusRow)
 
         // ボタン
-        let button = NSButton(title: "アクセシビリティ設定を確認...", target: self, action: #selector(openAccessibilitySettings))
+        let button = NSButton(title: L10n.settingsAccessibilityOpen, target: self, action: #selector(openAccessibilitySettings))
         button.font = .systemFont(ofSize: 13)
         button.bezelStyle = .rounded
         axSettingsButton = button
@@ -233,7 +233,9 @@ final class SettingsWindowController: NSObject {
     }
 
     private func axStatusText() -> String {
-        AXIsProcessTrusted() ? "✓ 有効" : "未許可"
+        AXIsProcessTrusted()
+            ? "✓ \(L10n.settingsAccessibilityEnabled)"
+            : L10n.settingsAccessibilityNotGranted
     }
 
     /// AX 権限ステータスを最新状態に更新する。

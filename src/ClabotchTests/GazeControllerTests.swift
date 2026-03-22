@@ -139,12 +139,13 @@ final class GazeControllerPermissionTests: XCTestCase {
     }
 
     func testPermissionNotGrantedWithoutAttention() {
-        // attention 無効 + override なし → attentionNeutral（権限チェックより前に return）
+        // checkPermission() 実行後、attention 無効のため attentionNeutral に戻る
         mockAX.isTrusted = false
 
         sut.startPolling()
         let exp = expectation(description: "poll 発火")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            XCTAssertEqual(self.sut.permissionStatus, .notGranted)
             XCTAssertEqual(self.sut.mode, .fixed(.f01_center, reason: .attentionNeutral))
             XCTAssertEqual(self.sut.gazeFrame, .f01_center)
             exp.fulfill()
@@ -723,6 +724,41 @@ final class GazeControllerAttentionTests: XCTestCase {
             exp.fulfill()
         }
         wait(for: [exp], timeout: 1.0)
+    }
+
+    func testNilPIDFallbackToNeutral() {
+        // frontmostPID が nil のとき、直前 gaze が残らず neutral に戻ることを検証
+        mockWorkspace.bundleIdentifier = "com.apple.Terminal"
+        mockWorkspace.pid = 1234
+        mockAX.terminalCenter = CGPoint(x: 500, y: 400)
+
+        // まず tracking 状態にする
+        sut.lookAtTerminal()
+        XCTAssertEqual(sut.mode, .tracking)
+
+        // pid を nil にして再度 lookAtTerminal（update() 発火）
+        mockWorkspace.pid = nil
+        sut.lookAtTerminal()
+
+        XCTAssertEqual(sut.gazeFrame, .f01_center)
+        XCTAssertEqual(sut.mode, .fixed(.f01_center, reason: .terminalNotFound))
+    }
+
+    func testNilStatusItemCenterFallbackToNeutral() {
+        // statusItemCenterProvider が nil を返すとき neutral に戻ることを検証
+        mockWorkspace.bundleIdentifier = "com.apple.Terminal"
+        mockWorkspace.pid = 1234
+        mockAX.terminalCenter = CGPoint(x: 500, y: 400)
+
+        sut.lookAtTerminal()
+        XCTAssertEqual(sut.mode, .tracking)
+
+        // statusItemCenterProvider を nil 返却にする
+        sut.statusItemCenterProvider = { nil }
+        sut.lookAtTerminal()
+
+        XCTAssertEqual(sut.gazeFrame, .f01_center)
+        XCTAssertEqual(sut.mode, .fixed(.f01_center, reason: .terminalNotFound))
     }
 }
 

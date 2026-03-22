@@ -14,6 +14,10 @@ xcuserdata/
 *.swp
 *~
 
+# バックアップファイル
+*.bak*
+
+
 # SwiftPM
 .build/
 Package.resolved
@@ -35,12 +39,10 @@ dist/
 !.claude/settings.json
 !.claude/agents/
 !.claude/agents/**
-!.claude/review-loop/
-!.claude/review-loop/**
-.claude/review-loop/runtime/*
-!.claude/review-loop/runtime/.gitignore
+.claude/review-loop/
 !.totonoe/
 !.totonoe/**
+.totonoe/.DS_Store
 .totonoe/runtime/
 .claude/settings.local.json
 .claude/hooks/

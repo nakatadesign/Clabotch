@@ -31,11 +31,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // メニュー構築
         let menu = NSMenu()
-        let settingsItem = NSMenuItem(title: "設定...", action: #selector(openSettings), keyEquivalent: ",")
+        let settingsItem = NSMenuItem(title: L10n.menuSettings, action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
         menu.addItem(NSMenuItem.separator())
-        let quitItem = NSMenuItem(title: "Quit Clabotch", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: L10n.menuQuit, action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
         menu.delegate = self
@@ -164,20 +164,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// テスト seam: アラートの表示と応答取得を差し替え可能にする。
     static var accessibilityAlertPresenter: () -> NSApplication.ModalResponse = {
         let alert = NSAlert()
-        alert.messageText = "アクセシビリティの許可が必要です"
-        alert.informativeText = """
-            視線追跡にはアクセシビリティの許可が必要です。
-
-            「システム設定を開く」を押して、一覧に Clabotch を追加し\
-            チェックを入れてください。
-            既にチェックが入っている場合は、一度外してから\
-            再度入れ直すと改善する場合があります。
-            """
+        alert.messageText = L10n.accessibilityAlertTitle
+        alert.informativeText = L10n.accessibilityAlertMessage
         alert.alertStyle = .warning
         // LSUIElement アプリはアイコンが自動設定されないため明示指定
         alert.icon = NSApp.applicationIconImage
-        alert.addButton(withTitle: "システム設定を開く")
-        alert.addButton(withTitle: "後で")
+        alert.addButton(withTitle: L10n.accessibilityOpenSettings)
+        alert.addButton(withTitle: L10n.commonLater)
         return alert.runModal()
     }
 

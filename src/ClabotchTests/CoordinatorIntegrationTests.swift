@@ -130,7 +130,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
 
         waitForCondition(description: "bubble shows working text") {
-            self.activeBubbleSpy.lastText == "実行中..."
+            self.activeBubbleSpy.lastText == L10n.workingText(for: "Bash")
         }
     }
 
@@ -153,7 +153,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 222000))
 
         waitForCondition(description: "bubble shows done text") {
-            self.activeBubbleSpy.lastText == "完了！(3分42秒)"
+            self.activeBubbleSpy.lastText == L10n.bubbleDone(elapsedText: L10n.elapsedTime(minutes: 3, seconds: 42))
         }
 
         XCTAssertEqual(eyeView.showSurprise, true)
@@ -178,10 +178,10 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .sessionDone(sessionID: "s1", elapsedMs: 0))
 
         // hookElapsedMs=0 の場合、StateMachine が startedAt からフォールバック計算するため
-        // 数ミリ秒の差が生じて "完了！(0秒)" になることがある
+        // 数ミリ秒の差が生じて経過時間付き完了文言になることがある
         waitForCondition(description: "bubble shows done text") {
             guard let text = self.activeBubbleSpy.lastText else { return false }
-            return text.hasPrefix("完了！")
+            return text.hasPrefix(L10n.bubbleDone)
         }
     }
 
@@ -206,7 +206,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .toolEnd(sessionID: "s1", toolName: "Bash", durationMs: 0, isError: true, errorMessage: "fail"))
 
         waitForCondition(description: "bubble shows error text") {
-            self.activeBubbleSpy.lastText == "エラーが出ました…"
+            self.activeBubbleSpy.lastText == L10n.bubbleError
         }
 
         XCTAssertEqual(gazeController.mode, .fixed(.f01_center, reason: .mascotStateOverride))
@@ -272,7 +272,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         }
 
         let call = ephemeralBubbleSpy.showCalls.last!
-        XCTAssertEqual(call.text, "別セッション完了 (1分12秒)")
+        XCTAssertEqual(call.text, L10n.bubbleForeignSessionDone(elapsedText: L10n.elapsedTime(minutes: 1, seconds: 12)))
         XCTAssertEqual(call.duration, 2.0)
         // active bubble は変化なし
         XCTAssertEqual(activeBubbleSpy.showCalls.count, activeCountBefore)
@@ -481,7 +481,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .sessionStart(sessionID: "s-foreign"))
 
         waitForCondition(description: "bubble updated with [+1] suffix") {
-            self.activeBubbleSpy.lastText == "実行中... [+1]"
+            self.activeBubbleSpy.lastText == "\(L10n.workingText(for: "Bash")) [+1]"
         }
     }
 
@@ -505,7 +505,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
 
         waitForCondition(description: "bubble shows working text") {
-            self.activeBubbleSpy.lastText == "実行中..."
+            self.activeBubbleSpy.lastText == L10n.workingText(for: "Bash")
         }
     }
 
@@ -518,7 +518,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .toolStart(sessionID: "s2", toolName: "Bash"))
 
         waitForCondition(description: "bubble shows [+1] suffix") {
-            self.activeBubbleSpy.lastText == "実行中... [+1]"
+            self.activeBubbleSpy.lastText == "\(L10n.workingText(for: "Bash")) [+1]"
         }
     }
 
@@ -532,7 +532,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .toolEnd(sessionID: "s3", toolName: "Bash", durationMs: 0, isError: true, errorMessage: "fail"))
 
         waitForCondition(description: "bubble shows [+2] suffix") {
-            self.activeBubbleSpy.lastText == "エラーが出ました… [+2]"
+            self.activeBubbleSpy.lastText == "\(L10n.bubbleError) [+2]"
         }
     }
 
@@ -544,7 +544,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
         stateMachine.handle(event: .toolStart(sessionID: "s1", toolName: "Read"))
 
         waitForCondition(description: "bubble shows [+1]") {
-            self.activeBubbleSpy.lastText == "読んでる... [+1]"
+            self.activeBubbleSpy.lastText == "\(L10n.workingText(for: "Read")) [+1]"
         }
 
         // s2 が done → session cleanup 後にサフィックスが消える
@@ -552,7 +552,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
 
         // done セッションの cleanup（doneAutoTransitionDelay=0.3s）を待つ
         waitForCondition(description: "suffix disappears after session cleanup") {
-            self.activeBubbleSpy.lastText == "読んでる..."
+            self.activeBubbleSpy.lastText == L10n.workingText(for: "Read")
         }
     }
 
@@ -567,7 +567,7 @@ final class CoordinatorIntegrationTests: XCTestCase {
 
         // s2 は working, s1 は done（まだ cleanup 前）→ sessions.count=2
         waitForCondition(description: "working with [+1] for done session") {
-            self.activeBubbleSpy.lastText == "実行中... [+1]"
+            self.activeBubbleSpy.lastText == "\(L10n.workingText(for: "Bash")) [+1]"
         }
     }
 

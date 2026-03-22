@@ -239,7 +239,11 @@ final class GazeController {
         guard
             let pid = workspaceProvider.frontmostPID(),
             let origin = statusItemCenterProvider?()
-        else { return }
+        else {
+            // pid または origin が取得できない場合、直前の gaze が残らないよう neutral に戻す
+            applyGaze(.fixed(.f01_center, reason: .terminalNotFound), frame: .f01_center)
+            return
+        }
 
         let (center, failReason) = axProvider.findTerminalCenter(pid: pid)
         if let reason = failReason {

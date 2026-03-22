@@ -57,12 +57,14 @@ final class SettingsStore {
     static let defaultSleepTimeoutMinutes = 5
 
     /// スリープタイムアウトの選択肢
-    static let sleepTimeoutOptions: [(label: String, minutes: Int)] = [
-        ("1分", 1),
-        ("5分（デフォルト）", 5),
-        ("10分", 10),
-        ("無効", 0),
-    ]
+    static var sleepTimeoutOptions: [(label: String, minutes: Int)] {
+        [
+            (L10n.sleepTimeoutOneMinute, 1),
+            (L10n.sleepTimeoutFiveMinutesDefault, 5),
+            (L10n.sleepTimeoutTenMinutes, 10),
+            (L10n.sleepTimeoutDisabled, 0),
+        ]
+    }
 
     // MARK: - アニメーション速度
 
@@ -98,11 +100,13 @@ final class SettingsStore {
     static let defaultAnimationSpeedPreset = 1
 
     /// アニメーション速度の選択肢
-    static let animationSpeedOptions: [(label: String, multiplier: Double)] = [
-        ("ゆっくり", 1.5),
-        ("標準", 1.0),
-        ("速い", 0.6),
-    ]
+    static var animationSpeedOptions: [(label: String, multiplier: Double)] {
+        [
+            (L10n.animationSpeedSlow, 1.5),
+            (L10n.animationSpeedNormal, 1.0),
+            (L10n.animationSpeedFast, 0.6),
+        ]
+    }
 
     // MARK: - テスト用
 
