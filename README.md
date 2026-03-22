@@ -4,7 +4,9 @@
 
 [日本語版 README はこちら](README.ja.md)
 
-Clabotch (クラボッチ) lives in your menu bar as a 20×14 px pixel-art character and reflects the real-time state of [Claude Code](https://claude.ai/code) — thinking, running tools, responding, done, or sleeping. No PNGs. Every frame is drawn in pure Swift.
+Clabotch (クラボッチ) lives in your menu bar as a pixel-art character and reflects the real-time state of [Claude Code](https://claude.ai/code) — thinking, running tools, responding, done, or sleeping. No PNGs. Every frame is drawn in pure Swift. The character itself is 20×14 px, centered within the menu bar slot.
+
+Inspired by two icons from different eras: the dot-art look and color palette of Clawd, Claude Code's terminal-native mascot, and the gaze of Eyeballs, the beloved 68K ClassicMacintosh desk accessory that watched from the Apple menu. Clabotch carries both forward — a tiny pair of eyes that knows what you're building.
 
 ![Clabotch in menu bar](docs/screenshot.gif)
 
@@ -12,15 +14,15 @@ Clabotch (クラボッチ) lives in your menu bar as a 20×14 px pixel-art chara
 
 ## What it does
 
-| Claude Code state | Clabotch |
-|-------------------|----------|
-| Idle | Eyes resting, gaze down-right |
-| Thinking | Still face, gentle nod |
-| Responding | Eyes scanning, *"Working…"* bubble |
-| Running a tool | Tool-specific bubble (e.g. *"Running command…"* for Bash) |
-| Done | Rainbow spin + jump + *"Done! (3 min 42 sec)"* |
-| Error | Shake animation + *"An error occurred…"* |
-| Sleeping | Eyes closed |
+| Claude Code state | Clabotch                                                  |
+| ----------------- | --------------------------------------------------------- |
+| Idle              | Eyes resting, gaze down-right                             |
+| Thinking          | Still face, gentle nod                                    |
+| Responding        | Eyes scanning, _"Working…"_ bubble                        |
+| Running a tool    | Tool-specific bubble (e.g. _"Running command…"_ for Bash) |
+| Done              | Rainbow spin + jump + _"Done! (3 min 42 sec)"_            |
+| Error             | Shake animation + _"An error occurred…"_                  |
+| Sleeping          | Eyes closed                                               |
 
 > 💬 Bubble text is localised. English and Japanese are supported out of the box; English is the fallback.
 
@@ -77,10 +79,10 @@ Then add the following entries to `~/.claude/settings.json`:
 ```json
 {
   "hooks": {
-    "PreToolUse":          [{ "command": "~/.claude/hooks/clabotch_pre_tool.sh" }],
-    "PostToolUse":         [{ "command": "~/.claude/hooks/clabotch_post_tool.sh" }],
-    "PostToolUseFailure":  [{ "command": "~/.claude/hooks/clabotch_post_tool_failure.sh" }],
-    "Stop":                [{ "command": "~/.claude/hooks/clabotch_stop.sh" }]
+    "PreToolUse": [{ "command": "~/.claude/hooks/clabotch_pre_tool.sh" }],
+    "PostToolUse": [{ "command": "~/.claude/hooks/clabotch_post_tool.sh" }],
+    "PostToolUseFailure": [{ "command": "~/.claude/hooks/clabotch_post_tool_failure.sh" }],
+    "Stop": [{ "command": "~/.claude/hooks/clabotch_stop.sh" }]
   }
 }
 ```
@@ -163,7 +165,7 @@ Launch the app's **Settings** panel (⌘,) to configure:
 Check that the hooks are installed and executable (`ls -la ~/.claude/hooks/`), and that the four entries appear in `~/.claude/settings.json`.
 
 **Gaze tracking not working**  
-Open *System Settings → Privacy & Security → Accessibility* and make sure Clabotch is listed and checked. If it appears greyed out or missing, remove the entry and re-grant permission from the onboarding dialog.
+Open _System Settings → Privacy & Security → Accessibility_ and make sure Clabotch is listed and checked. If it appears greyed out or missing, remove the entry and re-grant permission from the onboarding dialog.
 
 **Tests failing with "address already in use"**  
 Run `pkill -9 -f Clabotch` before the test command. A running instance holds the socket.
