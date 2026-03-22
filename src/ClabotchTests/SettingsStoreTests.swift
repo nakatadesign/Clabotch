@@ -124,7 +124,7 @@ final class SettingsStoreTests: XCTestCase {
     func testAnimationSpeedOptionsContainDefault() {
         let options = SettingsStore.animationSpeedOptions
         XCTAssertEqual(options.count, 3)
-        XCTAssertTrue(options.contains { $0.label == "標準" && $0.multiplier == 1.0 })
+        XCTAssertTrue(options.contains { $0.label == L10n.animationSpeedNormal && $0.multiplier == 1.0 })
     }
 
     func testResetClearsAnimationSpeed() {
