@@ -2,14 +2,9 @@
 
 **A tiny macOS menu bar mascot that watches over your Claude Code sessions.**
 
-Clabotch (クラボッチ) lives in your menu bar as a 22×14 px pixel-art character and reflects the real-time state of [Claude Code](https://claude.ai/code) — thinking, running tools, responding, done, or sleeping. No PNGs. Every frame is drawn in pure Swift.
+Clabotch (クラボッチ) lives in your menu bar as a 20×14 px pixel-art character and reflects the real-time state of [Claude Code](https://claude.ai/code) — thinking, running tools, responding, done, or sleeping. No PNGs. Every frame is drawn in pure Swift.
 
-<!-- Screenshot / GIF: replace the placeholder below with an actual demo -->
-<!--
-![Clabotch demo](docs/demo.gif)
--->
-
-> 📸 *Screenshots and demo GIF coming soon.*
+![Clabotch in menu bar](docs/screenshot.png)
 
 ---
 
