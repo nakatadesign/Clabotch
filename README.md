@@ -6,7 +6,7 @@
 
 Clabotch (クラボッチ) lives in your menu bar as a pixel-art character and reflects the real-time state of [Claude Code](https://claude.ai/code) — thinking, running tools, responding, done, or sleeping. No PNGs. Every frame is drawn in pure Swift. The character itself is 20×14 px, centered within the menu bar slot.
 
-Inspired by two icons from different eras: the dot-art look and color palette of Clawd, Claude Code's terminal-native mascot, and the gaze of Eyeballs, the beloved 68K ClassicMacintosh desk accessory that watched from the Apple menu. Clabotch carries both forward — a tiny pair of eyes that knows what you're building.
+Inspired by two icons from different eras: the dot-art look and color palette of Clawd, Claude Code's terminal-native mascot, and the gaze of Eyeballs, the beloved 68K Classic Macintosh desk accessory that watched from the Apple menu. Clabotch carries both forward — a tiny pair of eyes that knows what you're building.
 
 ![Clabotch in menu bar](screenshot.gif)
 
