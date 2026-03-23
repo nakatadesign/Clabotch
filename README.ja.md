@@ -74,10 +74,11 @@ cp hooks/*.sh ~/.claude/hooks/
 chmod +x ~/.claude/hooks/*.sh
 ```
 
-`~/.claude/settings.json` に以下を追記します。
+`~/.claude/settings.json` に hooks を追加します。このファイルがまだない場合は、以下をそのままコピーしてください。
 
 ```json
 {
+  "permissions": {},
   "hooks": {
     "PreToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "~/.claude/hooks/clabotch_pre_tool.sh" }] }],
     "PostToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "~/.claude/hooks/clabotch_post_tool.sh" }] }],
@@ -86,6 +87,8 @@ chmod +x ~/.claude/hooks/*.sh
   }
 }
 ```
+
+> 既に `hooks` セクションがある場合は、上記の4エントリを既存のセクションにマージしてください。
 
 Claude Code を再起動すると、次に Claude が作業を始めたときから Clabotch が動き出します。
 
@@ -161,8 +164,18 @@ clabotch/
 
 ## トラブルシューティング
 
-**Clabotch が Claude Code に反応しない**  
+**Clabotch が Claude Code に反応しない**
 `ls -la ~/.claude/hooks/` で hook スクリプトがインストール・実行可能になっているか確認し、`~/.claude/settings.json` に4つのエントリが記載されているか確認してください。
+
+**hooks を設定したのに Clabotch が反応しない**
+hooks の JSON フォーマットが正しいか確認してください。以下は**間違い**です:
+```json
+"PreToolUse": [{ "command": "~/.claude/hooks/clabotch_pre_tool.sh" }]
+```
+各エントリには `matcher` と `hooks` 配列が必要です:
+```json
+"PreToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "~/.claude/hooks/clabotch_pre_tool.sh" }] }]
+```
 
 **視線追跡が動かない**  
 _システム設定 → プライバシーとセキュリティ → アクセシビリティ_ を開き、Clabotch がリストに表示されてチェックが入っているか確認してください。グレーアウトしているか存在しない場合は、エントリを削除してオンボーディングダイアログから再許可してください。

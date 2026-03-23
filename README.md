@@ -74,10 +74,11 @@ cp hooks/*.sh ~/.claude/hooks/
 chmod +x ~/.claude/hooks/*.sh
 ```
 
-Then add the following entries to `~/.claude/settings.json`:
+Then add the hooks to `~/.claude/settings.json`. If you don't have this file yet, copy the entire block below:
 
 ```json
 {
+  "permissions": {},
   "hooks": {
     "PreToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "~/.claude/hooks/clabotch_pre_tool.sh" }] }],
     "PostToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "~/.claude/hooks/clabotch_post_tool.sh" }] }],
@@ -86,6 +87,8 @@ Then add the following entries to `~/.claude/settings.json`:
   }
 }
 ```
+
+> If you already have a `hooks` section with other entries, merge the four entries above into your existing section.
 
 Restart Claude Code. Clabotch should spring to life the next time Claude starts working.
 
@@ -161,8 +164,18 @@ Launch the app's **Settings** panel (⌘,) to configure:
 
 ## Troubleshooting
 
-**Clabotch doesn't react to Claude Code**  
+**Clabotch doesn't react to Claude Code**
 Check that the hooks are installed and executable (`ls -la ~/.claude/hooks/`), and that the four entries appear in `~/.claude/settings.json`.
+
+**Hooks are configured but Clabotch still doesn't respond**
+The hooks JSON format may be wrong. This is **incorrect**:
+```json
+"PreToolUse": [{ "command": "~/.claude/hooks/clabotch_pre_tool.sh" }]
+```
+Each entry requires a `matcher` and a `hooks` array:
+```json
+"PreToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "~/.claude/hooks/clabotch_pre_tool.sh" }] }]
+```
 
 **Gaze tracking not working**  
 Open _System Settings → Privacy & Security → Accessibility_ and make sure Clabotch is listed and checked. If it appears greyed out or missing, remove the entry and re-grant permission from the onboarding dialog.
