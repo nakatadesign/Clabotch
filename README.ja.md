@@ -79,10 +79,10 @@ chmod +x ~/.claude/hooks/*.sh
 ```json
 {
   "hooks": {
-    "PreToolUse": [{ "command": "~/.claude/hooks/clabotch_pre_tool.sh" }],
-    "PostToolUse": [{ "command": "~/.claude/hooks/clabotch_post_tool.sh" }],
-    "PostToolUseFailure": [{ "command": "~/.claude/hooks/clabotch_post_tool_failure.sh" }],
-    "Stop": [{ "command": "~/.claude/hooks/clabotch_stop.sh" }]
+    "PreToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "~/.claude/hooks/clabotch_pre_tool.sh" }] }],
+    "PostToolUse": [{ "matcher": "", "hooks": [{ "type": "command", "command": "~/.claude/hooks/clabotch_post_tool.sh" }] }],
+    "PostToolUseFailure": [{ "matcher": "", "hooks": [{ "type": "command", "command": "~/.claude/hooks/clabotch_post_tool_failure.sh" }] }],
+    "Stop": [{ "matcher": "", "hooks": [{ "type": "command", "command": "~/.claude/hooks/clabotch_stop.sh" }] }]
   }
 }
 ```
