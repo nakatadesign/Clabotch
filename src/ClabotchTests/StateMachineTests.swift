@@ -890,4 +890,119 @@ final class StateMachineRespondingTests: XCTestCase {
         }
         wait(for: [exp], timeout: 1)
     }
+
+    // MARK: - セッションタイムアウトテスト
+
+    // T-1. stale セッションがタイムアウト後に自動削除され idle に戻る
+    func testStaleSessionAutoCleanup() {
+        // タイムアウト 0.05秒、チェック間隔 0.03秒で高速テスト
+        let sm = StateMachine(
+            sessionTimeout: 0.05,
+            sessionTimeoutCheckInterval: 0.03
+        )
+        sm.handle(event: .sessionStart(sessionID: "s1"))
+        XCTAssertEqual(sm.displayPhase, .thinking)
+        XCTAssertEqual(sm.sessions.count, 1)
+
+        let exp = expectation(description: "stale session cleaned up")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            XCTAssertEqual(sm.sessions.count, 0)
+            XCTAssertEqual(sm.displayPhase, .idle)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1)
+    }
+
+    // T-2. アクティブなセッション（lastEventAt が新しい）は削除されない
+    func testActiveSessionNotCleaned() {
+        var currentTime = Date(timeIntervalSince1970: 1000)
+        let sm = StateMachine(
+            sessionTimeout: 0.1,
+            sessionTimeoutCheckInterval: 0.03,
+            now: { currentTime }
+        )
+        sm.handle(event: .sessionStart(sessionID: "s1"))
+
+        // タイムアウト前にイベントを送り続ける
+        let exp = expectation(description: "active session survives")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            currentTime = Date()  // now() を現在時刻に更新
+            sm.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            // セッションはまだ生存（最後のイベントから 0.1秒経っていない）
+            XCTAssertEqual(sm.sessions.count, 1)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1)
+    }
+
+    // T-3. 複数セッションで stale な方だけ削除される
+    func testStaleSessionCleanupRevealsOtherSession() {
+        var currentTime = Date(timeIntervalSince1970: 1000)
+        let sm = StateMachine(
+            sessionTimeout: 0.08,
+            sessionTimeoutCheckInterval: 0.03,
+            now: { currentTime }
+        )
+
+        // s1 を開始（古い lastEventAt）
+        sm.handle(event: .sessionStart(sessionID: "s1"))
+        sm.handle(event: .toolStart(sessionID: "s1", toolName: "Bash"))
+
+        // s2 を少し後に開始
+        currentTime = currentTime.addingTimeInterval(0.05)
+        sm.handle(event: .sessionStart(sessionID: "s2"))
+        sm.handle(event: .toolStart(sessionID: "s2", toolName: "Read"))
+
+        XCTAssertEqual(sm.sessions.count, 2)
+
+        // now() を s1 がタイムアウトするが s2 はまだ生存する時刻に設定
+        let exp = expectation(description: "only stale session removed")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            currentTime = Date(timeIntervalSince1970: 1000.1)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            XCTAssertEqual(sm.sessions.count, 1)
+            XCTAssertNotNil(sm.sessions["s2"])
+            XCTAssertNil(sm.sessions["s1"])
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1)
+    }
+
+    // T-4. sessionTimeout が .infinity のときはタイマーが開始されない
+    func testInfiniteSessionTimeoutDisablesTimer() {
+        let sm = StateMachine(sessionTimeout: .infinity)
+        sm.handle(event: .sessionStart(sessionID: "s1"))
+        XCTAssertEqual(sm.sessions.count, 1)
+
+        let exp = expectation(description: "session persists with infinite timeout")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            XCTAssertEqual(sm.sessions.count, 1)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1)
+    }
+
+    // T-5. updateSessionTimeout で動的にタイムアウトを変更できる
+    func testUpdateSessionTimeout() {
+        let sm = StateMachine(
+            sessionTimeout: .infinity,
+            sessionTimeoutCheckInterval: 0.03
+        )
+        sm.handle(event: .sessionStart(sessionID: "s1"))
+        XCTAssertEqual(sm.sessions.count, 1)
+
+        // タイムアウトを短く変更
+        sm.updateSessionTimeout(0.05)
+
+        let exp = expectation(description: "session cleaned up after timeout update")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            XCTAssertEqual(sm.sessions.count, 0)
+            XCTAssertEqual(sm.displayPhase, .idle)
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 1)
+    }
 }

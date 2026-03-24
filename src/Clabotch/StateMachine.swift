@@ -45,6 +45,13 @@ final class StateMachine {
     private var sleepTimer: Timer?
     private(set) var sleepThreshold: TimeInterval
 
+    // MARK: - セッションタイムアウト
+
+    private var sessionTimeoutTimer: Timer?
+    private(set) var sessionTimeout: TimeInterval
+    /// テスト用: タイムアウトチェック間隔。本番では 60秒。
+    private let sessionTimeoutCheckInterval: TimeInterval
+
     // MARK: - Auto-transition delay
 
     private let errorAutoTransitionDelay: TimeInterval
@@ -57,12 +64,16 @@ final class StateMachine {
 
     init(
         sleepThreshold: TimeInterval = 300,
+        sessionTimeout: TimeInterval = 300,
+        sessionTimeoutCheckInterval: TimeInterval = 60,
         errorAutoTransitionDelay: TimeInterval = 2.5,
         doneAutoTransitionDelay: TimeInterval = 4.0,
         respondingTransitionDelay: TimeInterval = 0.8,
         now: @escaping () -> Date = { Date() }
     ) {
         self.sleepThreshold = sleepThreshold
+        self.sessionTimeout = sessionTimeout
+        self.sessionTimeoutCheckInterval = sessionTimeoutCheckInterval
         self.errorAutoTransitionDelay = errorAutoTransitionDelay
         self.doneAutoTransitionDelay = doneAutoTransitionDelay
         self.respondingTransitionDelay = respondingTransitionDelay
@@ -106,6 +117,7 @@ final class StateMachine {
             )
             sessionEpochs[sessionID] = 0
             recalculateDisplayPhase()
+            startSessionTimeoutTimerIfNeeded()
 
         case .toolStart(let sessionID, let toolName):
             guard let s = sessions[sessionID], !s.phase.isDone else { return }
@@ -257,6 +269,49 @@ final class StateMachine {
         onPhaseChanged?(newPhase)
     }
 
+    // MARK: - セッションタイムアウトタイマー
+
+    /// セッションが存在する間、定期的に stale セッションをチェックするタイマーを開始する。
+    private func startSessionTimeoutTimerIfNeeded() {
+        guard !sessions.isEmpty else { return }
+        guard sessionTimeoutTimer == nil else { return }
+        guard sessionTimeout.isFinite else { return }
+        sessionTimeoutTimer = Timer.scheduledTimer(
+            withTimeInterval: sessionTimeoutCheckInterval, repeats: true
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.reapStaleSessions()
+        }
+    }
+
+    private func cancelSessionTimeoutTimer() {
+        sessionTimeoutTimer?.invalidate()
+        sessionTimeoutTimer = nil
+    }
+
+    /// lastEventAt が sessionTimeout を超えたセッションを削除する。
+    private func reapStaleSessions() {
+        dispatchPrecondition(condition: .onQueue(.main))
+        let currentDate = now()
+        var reaped = false
+        for (sessionID, session) in sessions {
+            let elapsed = currentDate.timeIntervalSince(session.lastEventAt)
+            guard elapsed > sessionTimeout else { continue }
+            os_log(.default, "🧠 StateMachine: セッションタイムアウト sid=%{public}@ (%.0f秒超過)",
+                   String(sessionID.prefix(8)), elapsed)
+            sessions.removeValue(forKey: sessionID)
+            sessionEpochs.removeValue(forKey: sessionID)
+            cancelPendingTransition(for: sessionID)
+            reaped = true
+        }
+        if reaped {
+            recalculateDisplayPhase()
+        }
+        if sessions.isEmpty {
+            cancelSessionTimeoutTimer()
+        }
+    }
+
     // MARK: - Sleep タイマー
 
     private func startSleepTimerIfNeeded() {
@@ -304,6 +359,18 @@ final class StateMachine {
 
         if newThreshold.isFinite {
             startSleepTimerIfNeeded()
+        }
+    }
+
+    /// セッションタイムアウトを動的に変更する。
+    /// .infinity を指定するとタイムアウト無効。
+    func updateSessionTimeout(_ newTimeout: TimeInterval) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        sessionTimeout = newTimeout
+        cancelSessionTimeoutTimer()
+
+        if newTimeout.isFinite {
+            startSessionTimeoutTimerIfNeeded()
         }
     }
 
