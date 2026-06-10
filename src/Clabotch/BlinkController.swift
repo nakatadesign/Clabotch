@@ -1,5 +1,12 @@
 import Foundation
 
+/// BlinkController が保持するタイマーの抽象。テストで実時間に依存しない fake に差し替える。
+protocol BlinkTimer {
+    func invalidate()
+}
+
+extension Timer: BlinkTimer {}
+
 /// まばたき制御コントローラー。main thread 専用。
 /// v11 §6: 通常（idle, thinking, working, done）→ 2.8〜5.5秒ランダム間隔でまばたき
 ///         停止（error, sleeping）→ まばたきなし
@@ -12,19 +19,26 @@ final class BlinkController {
 
     // MARK: - Properties
 
+    typealias TimerScheduler = (_ interval: TimeInterval, _ handler: @escaping () -> Void) -> BlinkTimer
+
     private let intervalRange: ClosedRange<Double>
     private let randomSource: () -> Double  // 0.0..<1.0 のランダム値を返す
-    private var blinkTimer: Timer?
+    private let scheduleTimer: TimerScheduler
+    private var blinkTimer: BlinkTimer?
     private(set) var isBlinking: Bool = false
 
     // MARK: - Init
 
     init(
         intervalRange: ClosedRange<Double> = 2.8...5.5,
-        randomSource: @escaping () -> Double = { Double.random(in: 0.0..<1.0) }
+        randomSource: @escaping () -> Double = { Double.random(in: 0.0..<1.0) },
+        scheduleTimer: @escaping TimerScheduler = { interval, handler in
+            Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { _ in handler() }
+        }
     ) {
         self.intervalRange = intervalRange
         self.randomSource = randomSource
+        self.scheduleTimer = scheduleTimer
     }
 
     // MARK: - Public API
@@ -52,9 +66,7 @@ final class BlinkController {
         blinkTimer?.invalidate()
         let interval = intervalRange.lowerBound
             + randomSource() * (intervalRange.upperBound - intervalRange.lowerBound)
-        blinkTimer = Timer.scheduledTimer(
-            withTimeInterval: interval, repeats: false
-        ) { [weak self] _ in
+        blinkTimer = scheduleTimer(interval) { [weak self] in
             guard let self, self.isBlinking else { return }
             self.onBlink?()
             self.scheduleNextBlink()
