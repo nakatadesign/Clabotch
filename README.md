@@ -45,7 +45,7 @@ Events arrive via Claude Code hooks → Unix domain socket → `HookServer` → 
 ### 1. Build
 
 ```bash
-git clone https://github.com/nakatadesign/clabotch.git
+git clone https://github.com/nakatadesign/Clabotch.git
 cd clabotch/src
 xcodegen generate
 xcodebuild build \
