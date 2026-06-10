@@ -103,7 +103,7 @@ final class SettingsWindowControllerTests: XCTestCase {
     func testCompletionSoundCheckboxTogglesStoreAndPlaysPreview() {
         let wc = makeHeadlessSUT()
         var previewCount = 0
-        wc.playPreviewSound = { previewCount += 1 }
+        wc.playPreviewSound = { _ in previewCount += 1 }
         wc.showWindow()
 
         guard let checkbox = wc.completionSoundCheckbox else {
@@ -126,6 +126,63 @@ final class SettingsWindowControllerTests: XCTestCase {
         fireAction()
         XCTAssertFalse(store.completionSoundEnabled)
         XCTAssertEqual(previewCount, 1)
+    }
+
+    // MARK: - 完了通知音サウンド選択（patch_021）
+
+    func testCompletionSoundPopupHasAllOptionsAndDefaultSelection() {
+        let wc = makeHeadlessSUT()
+        wc.showWindow()
+        XCTAssertNotNil(wc.completionSoundPopup)
+        XCTAssertEqual(wc.completionSoundPopup?.numberOfItems, SettingsStore.completionSoundOptions.count)
+        XCTAssertEqual(wc.completionSoundPopup?.selectedItem?.title, "Glass")
+        // チェック OFF（デフォルト）ではポップアップ無効
+        XCTAssertEqual(wc.completionSoundPopup?.isEnabled, false)
+    }
+
+    func testCompletionSoundPopupReflectsCurrentSetting() {
+        store.completionSoundEnabled = true
+        store.completionSoundName = "Hero"
+        let wc = makeHeadlessSUT()
+        wc.showWindow()
+        XCTAssertEqual(wc.completionSoundPopup?.selectedItem?.title, "Hero")
+        XCTAssertEqual(wc.completionSoundPopup?.isEnabled, true)
+    }
+
+    func testCompletionSoundPopupSelectionUpdatesStoreAndPlaysPreview() {
+        store.completionSoundEnabled = true
+        let wc = makeHeadlessSUT()
+        var playedNames: [String] = []
+        wc.playPreviewSound = { playedNames.append($0) }
+        wc.showWindow()
+
+        guard let popup = wc.completionSoundPopup else {
+            return XCTFail("completionSoundPopup が生成されていない")
+        }
+
+        popup.selectItem(withTitle: "Ping")
+        _ = popup.target?.perform(popup.action, with: popup)
+
+        XCTAssertEqual(store.completionSoundName, "Ping")
+        XCTAssertEqual(playedNames, ["Ping"])
+    }
+
+    func testCompletionSoundCheckboxTogglesPopupEnabled() {
+        let wc = makeHeadlessSUT()
+        wc.playPreviewSound = { _ in }
+        wc.showWindow()
+
+        guard let checkbox = wc.completionSoundCheckbox else {
+            return XCTFail("completionSoundCheckbox が生成されていない")
+        }
+
+        checkbox.state = .on
+        _ = checkbox.target?.perform(checkbox.action, with: checkbox)
+        XCTAssertEqual(wc.completionSoundPopup?.isEnabled, true)
+
+        checkbox.state = .off
+        _ = checkbox.target?.perform(checkbox.action, with: checkbox)
+        XCTAssertEqual(wc.completionSoundPopup?.isEnabled, false)
     }
 }
 

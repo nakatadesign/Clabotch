@@ -159,4 +159,40 @@ final class SettingsStoreTests: XCTestCase {
         store.resetForTesting()
         XCTAssertFalse(store.completionSoundEnabled)
     }
+
+    // MARK: - completionSoundName（patch_021）
+
+    func testDefaultCompletionSoundNameIsGlass() {
+        XCTAssertEqual(store.completionSoundName, "Glass")
+    }
+
+    func testSetCompletionSoundNamePersists() {
+        store.completionSoundName = "Hero"
+        // 新しいインスタンスで読み直し
+        let store2 = SettingsStore(defaults: testDefaults)
+        XCTAssertEqual(store2.completionSoundName, "Hero")
+    }
+
+    func testInvalidCompletionSoundNameFallsBackToDefault() {
+        testDefaults.set("NotASound", forKey: "clabotch.completionSoundName")
+        XCTAssertEqual(store.completionSoundName, "Glass")
+    }
+
+    func testCompletionSoundNameOnChangeFires() {
+        var changeCount = 0
+        store.onChange = { changeCount += 1 }
+
+        store.completionSoundName = "Ping"
+        XCTAssertEqual(changeCount, 1)
+    }
+
+    func testCompletionSoundOptionsContainDefault() {
+        XCTAssertTrue(SettingsStore.completionSoundOptions.contains(SettingsStore.defaultCompletionSoundName))
+    }
+
+    func testResetClearsCompletionSoundName() {
+        store.completionSoundName = "Hero"
+        store.resetForTesting()
+        XCTAssertEqual(store.completionSoundName, "Glass")
+    }
 }

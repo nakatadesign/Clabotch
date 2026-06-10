@@ -10,6 +10,7 @@ final class SettingsStore {
         static let sleepTimeoutMinutes = "clabotch.sleepTimeoutMinutes"
         static let animationSpeedPreset = "clabotch.animationSpeedPreset"
         static let completionSoundEnabled = "clabotch.completionSoundEnabled"
+        static let completionSoundName = "clabotch.completionSoundName"
     }
 
     // MARK: - DI seam
@@ -120,6 +121,31 @@ final class SettingsStore {
         }
     }
 
+    /// 完了通知音のサウンド名。デフォルト: "Glass"。
+    /// 選択肢にない値（古い設定・手動編集）はデフォルトに丸める。
+    var completionSoundName: String {
+        get {
+            guard let value = defaults.string(forKey: Keys.completionSoundName),
+                  Self.completionSoundOptions.contains(value) else {
+                return Self.defaultCompletionSoundName
+            }
+            return value
+        }
+        set {
+            defaults.set(newValue, forKey: Keys.completionSoundName)
+            onChange?()
+        }
+    }
+
+    /// デフォルトの完了通知音
+    static let defaultCompletionSoundName = "Glass"
+
+    /// 選択可能な macOS システムサウンド名（/System/Library/Sounds 標準セット）
+    static let completionSoundOptions = [
+        "Basso", "Blow", "Bottle", "Frog", "Funk", "Glass", "Hero",
+        "Morse", "Ping", "Pop", "Purr", "Sosumi", "Submarine", "Tink",
+    ]
+
     // MARK: - テスト用
 
     /// 全設定をリセットする。
@@ -127,6 +153,7 @@ final class SettingsStore {
         defaults.removeObject(forKey: Keys.sleepTimeoutMinutes)
         defaults.removeObject(forKey: Keys.animationSpeedPreset)
         defaults.removeObject(forKey: Keys.completionSoundEnabled)
+        defaults.removeObject(forKey: Keys.completionSoundName)
     }
 }
 

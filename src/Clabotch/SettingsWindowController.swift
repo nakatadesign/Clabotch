@@ -34,9 +34,11 @@ final class SettingsWindowController: NSObject {
     private(set) var launchAtLoginCheckbox: NSButton?
     /// 完了通知音チェックボックス（テスト検証用に公開）
     private(set) var completionSoundCheckbox: NSButton?
+    /// 完了通知音の選択ポップアップ（テスト検証用に公開）
+    private(set) var completionSoundPopup: NSPopUpButton?
     /// 通知音プレビュー再生（patch_021）。テストでは spy に差し替える。
-    var playPreviewSound: () -> Void = {
-        NSSound(named: CoordinatorBinder.completionSoundName)?.play()
+    var playPreviewSound: (String) -> Void = { name in
+        NSSound(named: name)?.play()
     }
     /// アニメーション速度ポップアップ（テスト検証用に公開）
     private(set) var animSpeedPopup: NSPopUpButton?
@@ -211,20 +213,46 @@ final class SettingsWindowController: NSObject {
     // MARK: - 完了通知音（patch_021）
 
     private func buildCompletionSoundRow() -> NSView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.spacing = 8
+
         let checkbox = NSButton(checkboxWithTitle: L10n.settingsCompletionSound, target: self, action: #selector(completionSoundChanged(_:)))
         checkbox.font = .systemFont(ofSize: 13)
         checkbox.state = settingsStore.completionSoundEnabled ? .on : .off
         completionSoundCheckbox = checkbox
-        return checkbox
+
+        let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+        popup.font = .systemFont(ofSize: 13)
+        for name in SettingsStore.completionSoundOptions {
+            popup.addItem(withTitle: name)
+        }
+        popup.selectItem(withTitle: settingsStore.completionSoundName)
+        popup.isEnabled = settingsStore.completionSoundEnabled
+        popup.target = self
+        popup.action = #selector(completionSoundNameChanged(_:))
+        completionSoundPopup = popup
+
+        row.addArrangedSubview(checkbox)
+        row.addArrangedSubview(popup)
+        return row
     }
 
     @objc private func completionSoundChanged(_ sender: NSButton) {
         let enabled = sender.state == .on
         settingsStore.completionSoundEnabled = enabled
+        completionSoundPopup?.isEnabled = enabled
         // ON にした瞬間にプレビュー再生（どんな音か確認できるように）
         if enabled {
-            playPreviewSound()
+            playPreviewSound(settingsStore.completionSoundName)
         }
+    }
+
+    @objc private func completionSoundNameChanged(_ sender: NSPopUpButton) {
+        guard let name = sender.selectedItem?.title else { return }
+        settingsStore.completionSoundName = name
+        // 選んだ音をすぐ確認できるようプレビュー再生
+        playPreviewSound(name)
     }
 
     // MARK: - AX 権限

@@ -165,7 +165,7 @@ final class AppDelegateCoordinatorTests: XCTestCase {
         let binder = makeBinderWithNoSessions()
         var playCount = 0
         binder.isCompletionSoundEnabled = { true }
-        binder.playCompletionSound = { playCount += 1 }
+        binder.playCompletionSound = { _ in playCount += 1 }
         binder.bind()
 
         binder.stateMachine.onPhaseChanged?(.done(elapsedMs: 1000))
@@ -173,11 +173,31 @@ final class AppDelegateCoordinatorTests: XCTestCase {
         XCTAssertEqual(playCount, 1)
     }
 
+    func testCompletionSoundUsesSelectedSoundName() {
+        let binder = makeBinderWithNoSessions()
+        var playedNames: [String] = []
+        binder.isCompletionSoundEnabled = { true }
+        binder.completionSoundName = { "Hero" }
+        binder.playCompletionSound = { playedNames.append($0) }
+        binder.bind()
+
+        binder.stateMachine.onPhaseChanged?(.done(elapsedMs: 1000))
+
+        XCTAssertEqual(playedNames, ["Hero"])
+    }
+
+    func testCompletionSoundDefaultNameIsGlass() {
+        let binder = makeBinderWithNoSessions()
+        // AppDelegate が結線しない場合のデフォルトは SettingsStore のデフォルトと一致
+        XCTAssertEqual(binder.completionSoundName(), SettingsStore.defaultCompletionSoundName)
+        XCTAssertEqual(SettingsStore.defaultCompletionSoundName, "Glass")
+    }
+
     func testCompletionSoundNotPlayedWhenDisabled() {
         let binder = makeBinderWithNoSessions()
         var playCount = 0
         binder.isCompletionSoundEnabled = { false }
-        binder.playCompletionSound = { playCount += 1 }
+        binder.playCompletionSound = { _ in playCount += 1 }
         binder.bind()
 
         binder.stateMachine.onPhaseChanged?(.done(elapsedMs: 1000))
@@ -189,7 +209,7 @@ final class AppDelegateCoordinatorTests: XCTestCase {
         let binder = makeBinderWithNoSessions()
         var playCount = 0
         binder.isCompletionSoundEnabled = { true }
-        binder.playCompletionSound = { playCount += 1 }
+        binder.playCompletionSound = { _ in playCount += 1 }
         binder.bind()
 
         binder.stateMachine.onPhaseChanged?(.idle)

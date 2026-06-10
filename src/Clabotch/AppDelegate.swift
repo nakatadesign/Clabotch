@@ -62,9 +62,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
         binder?.bind()
 
-        // 完了通知音の有効判定を SettingsStore に結線（patch_021）
+        // 完了通知音の有効判定とサウンド名を SettingsStore に結線（patch_021）
         binder?.isCompletionSoundEnabled = { [weak self] in
             self?.settingsStore.completionSoundEnabled ?? false
+        }
+        binder?.completionSoundName = { [weak self] in
+            self?.settingsStore.completionSoundName ?? SettingsStore.defaultCompletionSoundName
         }
 
         // AX 権限変化 → 設定画面のステータス更新
