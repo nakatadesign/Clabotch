@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import os.log
 
@@ -13,6 +14,12 @@ final class CoordinatorBinder {
     var anchorProvider: () -> CGPoint?
     /// AX 権限変化時の追加通知（設定画面のステータス更新など）。
     var onAccessibilityStatusChanged: ((GazePermissionStatus) -> Void)?
+    /// 完了通知音の有効判定（patch_021）。AppDelegate が SettingsStore を結線する。
+    var isCompletionSoundEnabled: () -> Bool = { false }
+    /// 完了通知音の再生（patch_021）。テストでは spy に差し替える。
+    var playCompletionSound: () -> Void = {
+        NSSound(named: CoordinatorBinder.completionSoundName)?.play()
+    }
 
     init(
         stateMachine: StateMachine,
@@ -65,6 +72,10 @@ final class CoordinatorBinder {
             // §5: DONE 時にジャンプアニメーション（DONE スピンとは独立して動作）
             if case .done = phase {
                 self.eyeView?.performJump()
+                // patch_021: 設定で有効な場合のみ完了通知音を再生
+                if self.isCompletionSoundEnabled() {
+                    self.playCompletionSound()
+                }
             }
 
             if let text = self.bubbleText(for: phase) {
@@ -177,6 +188,9 @@ final class CoordinatorBinder {
 
     /// activeBubble 表示中に ephemeralBubble を下にずらすオフセット（ポイント）
     static let bubbleStackOffset: CGFloat = 30
+
+    /// 完了通知音の macOS システムサウンド名（patch_021）
+    static let completionSoundName = "Glass"
 
     // MARK: - ヘルパー
 

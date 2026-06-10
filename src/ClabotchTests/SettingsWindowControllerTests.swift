@@ -83,6 +83,50 @@ final class SettingsWindowControllerTests: XCTestCase {
         wc.showWindow()
         XCTAssertEqual(wc.animSpeedPopup?.selectedItem?.title, L10n.animationSpeedFast)
     }
+
+    // MARK: - 完了通知音（patch_021）
+
+    func testCompletionSoundCheckboxDefaultOff() {
+        let wc = makeHeadlessSUT()
+        wc.showWindow()
+        XCTAssertNotNil(wc.completionSoundCheckbox)
+        XCTAssertEqual(wc.completionSoundCheckbox?.state, .off)
+    }
+
+    func testCompletionSoundCheckboxReflectsCurrentSetting() {
+        store.completionSoundEnabled = true
+        let wc = makeHeadlessSUT()
+        wc.showWindow()
+        XCTAssertEqual(wc.completionSoundCheckbox?.state, .on)
+    }
+
+    func testCompletionSoundCheckboxTogglesStoreAndPlaysPreview() {
+        let wc = makeHeadlessSUT()
+        var previewCount = 0
+        wc.playPreviewSound = { previewCount += 1 }
+        wc.showWindow()
+
+        guard let checkbox = wc.completionSoundCheckbox else {
+            return XCTFail("completionSoundCheckbox が生成されていない")
+        }
+        // ヘッドレス（window なし）では performClick が action を発火しないため、
+        // state を設定して action を直接呼ぶ
+        let fireAction = {
+            _ = checkbox.target?.perform(checkbox.action, with: checkbox)
+        }
+
+        // ON: store 更新 + プレビュー再生
+        checkbox.state = .on
+        fireAction()
+        XCTAssertTrue(store.completionSoundEnabled)
+        XCTAssertEqual(previewCount, 1)
+
+        // OFF: store 更新、プレビューは再生しない
+        checkbox.state = .off
+        fireAction()
+        XCTAssertFalse(store.completionSoundEnabled)
+        XCTAssertEqual(previewCount, 1)
+    }
 }
 
 // MARK: - StateMachine.updateSleepThreshold テスト

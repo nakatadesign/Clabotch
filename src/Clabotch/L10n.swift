@@ -45,6 +45,7 @@ enum L10n {
     static var settingsSleepTimeout: String { tr("settings.sleep_timeout", "Sleep after:") }
     static var settingsAnimationSpeed: String { tr("settings.animation_speed", "Animation speed:") }
     static var settingsLaunchAtLogin: String { tr("settings.launch_at_login", "Launch at login") }
+    static var settingsCompletionSound: String { tr("settings.completion_sound", "Play sound when done") }
     static var settingsAccessibility: String { tr("settings.accessibility", "Gaze tracking:") }
     static var settingsAccessibilityOpen: String {
         tr("settings.accessibility.open_settings", "Review Accessibility Settings...")

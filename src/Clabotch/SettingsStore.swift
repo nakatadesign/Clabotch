@@ -9,6 +9,7 @@ final class SettingsStore {
     private enum Keys {
         static let sleepTimeoutMinutes = "clabotch.sleepTimeoutMinutes"
         static let animationSpeedPreset = "clabotch.animationSpeedPreset"
+        static let completionSoundEnabled = "clabotch.completionSoundEnabled"
     }
 
     // MARK: - DI seam
@@ -108,12 +109,24 @@ final class SettingsStore {
         ]
     }
 
+    // MARK: - 完了通知音（patch_021）
+
+    /// done フェーズ遷移時に通知音を鳴らすか。デフォルト: false（無効）。
+    var completionSoundEnabled: Bool {
+        get { defaults.bool(forKey: Keys.completionSoundEnabled) }
+        set {
+            defaults.set(newValue, forKey: Keys.completionSoundEnabled)
+            onChange?()
+        }
+    }
+
     // MARK: - テスト用
 
     /// 全設定をリセットする。
     func resetForTesting() {
         defaults.removeObject(forKey: Keys.sleepTimeoutMinutes)
         defaults.removeObject(forKey: Keys.animationSpeedPreset)
+        defaults.removeObject(forKey: Keys.completionSoundEnabled)
     }
 }
 

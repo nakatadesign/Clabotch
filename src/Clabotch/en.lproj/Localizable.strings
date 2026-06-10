@@ -14,6 +14,7 @@
 "settings.sleep_timeout" = "Sleep after:";
 "settings.animation_speed" = "Animation speed:";
 "settings.launch_at_login" = "Launch at login";
+"settings.completion_sound" = "Play sound when done";
 "settings.accessibility" = "Gaze tracking:";
 "settings.accessibility.open_settings" = "Review Accessibility Settings...";
 "settings.accessibility.enabled" = "Enabled";

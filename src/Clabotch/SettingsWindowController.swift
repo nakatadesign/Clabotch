@@ -32,6 +32,12 @@ final class SettingsWindowController: NSObject {
     private(set) var sleepPopup: NSPopUpButton?
     /// チェックボックス（テスト検証用に公開）
     private(set) var launchAtLoginCheckbox: NSButton?
+    /// 完了通知音チェックボックス（テスト検証用に公開）
+    private(set) var completionSoundCheckbox: NSButton?
+    /// 通知音プレビュー再生（patch_021）。テストでは spy に差し替える。
+    var playPreviewSound: () -> Void = {
+        NSSound(named: CoordinatorBinder.completionSoundName)?.play()
+    }
     /// アニメーション速度ポップアップ（テスト検証用に公開）
     private(set) var animSpeedPopup: NSPopUpButton?
     /// AX 権限ステータスラベル（テスト検証用に公開）
@@ -88,6 +94,10 @@ final class SettingsWindowController: NSObject {
         // ログイン時自動起動行
         let launchRow = buildLaunchAtLoginRow()
         stack.addArrangedSubview(launchRow)
+
+        // 完了通知音行（patch_021）
+        let soundRow = buildCompletionSoundRow()
+        stack.addArrangedSubview(soundRow)
 
         // スリープタイムアウト行
         let sleepRow = buildSleepTimeoutRow()
@@ -196,6 +206,25 @@ final class SettingsWindowController: NSObject {
         checkbox.state = launchAtLogin.isEnabled ? .on : .off
         launchAtLoginCheckbox = checkbox
         return checkbox
+    }
+
+    // MARK: - 完了通知音（patch_021）
+
+    private func buildCompletionSoundRow() -> NSView {
+        let checkbox = NSButton(checkboxWithTitle: L10n.settingsCompletionSound, target: self, action: #selector(completionSoundChanged(_:)))
+        checkbox.font = .systemFont(ofSize: 13)
+        checkbox.state = settingsStore.completionSoundEnabled ? .on : .off
+        completionSoundCheckbox = checkbox
+        return checkbox
+    }
+
+    @objc private func completionSoundChanged(_ sender: NSButton) {
+        let enabled = sender.state == .on
+        settingsStore.completionSoundEnabled = enabled
+        // ON にした瞬間にプレビュー再生（どんな音か確認できるように）
+        if enabled {
+            playPreviewSound()
+        }
     }
 
     // MARK: - AX 権限

@@ -158,4 +158,47 @@ final class AppDelegateCoordinatorTests: XCTestCase {
         XCTAssertEqual(CoordinatorBinder.formatElapsedTime(60000), L10n.elapsedTime(minutes: 1, seconds: 0))
         XCTAssertEqual(CoordinatorBinder.formatElapsedTime(0), L10n.elapsedTime(minutes: 0, seconds: 0))
     }
+
+    // MARK: - 完了通知音（patch_021）
+
+    func testCompletionSoundPlayedOnDoneWhenEnabled() {
+        let binder = makeBinderWithNoSessions()
+        var playCount = 0
+        binder.isCompletionSoundEnabled = { true }
+        binder.playCompletionSound = { playCount += 1 }
+        binder.bind()
+
+        binder.stateMachine.onPhaseChanged?(.done(elapsedMs: 1000))
+
+        XCTAssertEqual(playCount, 1)
+    }
+
+    func testCompletionSoundNotPlayedWhenDisabled() {
+        let binder = makeBinderWithNoSessions()
+        var playCount = 0
+        binder.isCompletionSoundEnabled = { false }
+        binder.playCompletionSound = { playCount += 1 }
+        binder.bind()
+
+        binder.stateMachine.onPhaseChanged?(.done(elapsedMs: 1000))
+
+        XCTAssertEqual(playCount, 0)
+    }
+
+    func testCompletionSoundNotPlayedOnNonDonePhases() {
+        let binder = makeBinderWithNoSessions()
+        var playCount = 0
+        binder.isCompletionSoundEnabled = { true }
+        binder.playCompletionSound = { playCount += 1 }
+        binder.bind()
+
+        binder.stateMachine.onPhaseChanged?(.idle)
+        binder.stateMachine.onPhaseChanged?(.thinking)
+        binder.stateMachine.onPhaseChanged?(.responding)
+        binder.stateMachine.onPhaseChanged?(.working(toolName: "Bash"))
+        binder.stateMachine.onPhaseChanged?(.error(toolName: "Bash", message: "err"))
+        binder.stateMachine.onPhaseChanged?(.sleeping)
+
+        XCTAssertEqual(playCount, 0)
+    }
 }

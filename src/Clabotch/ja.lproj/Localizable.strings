@@ -14,6 +14,7 @@
 "settings.sleep_timeout" = "スリープまで:";
 "settings.animation_speed" = "アニメーション速度:";
 "settings.launch_at_login" = "ログイン時に起動";
+"settings.completion_sound" = "完了時に通知音を鳴らす";
 "settings.accessibility" = "視線追跡:";
 "settings.accessibility.open_settings" = "アクセシビリティ設定を確認...";
 "settings.accessibility.enabled" = "有効";

@@ -62,6 +62,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
         binder?.bind()
 
+        // 完了通知音の有効判定を SettingsStore に結線（patch_021）
+        binder?.isCompletionSoundEnabled = { [weak self] in
+            self?.settingsStore.completionSoundEnabled ?? false
+        }
+
         // AX 権限変化 → 設定画面のステータス更新
         binder?.onAccessibilityStatusChanged = { [weak self] _ in
             self?.settingsWindowController?.refreshAccessibilityStatus()

@@ -132,4 +132,31 @@ final class SettingsStoreTests: XCTestCase {
         store.resetForTesting()
         XCTAssertEqual(store.animationSpeedPreset, 1) // デフォルトに戻る
     }
+
+    // MARK: - completionSoundEnabled（patch_021）
+
+    func testDefaultCompletionSoundDisabled() {
+        XCTAssertFalse(store.completionSoundEnabled)
+    }
+
+    func testSetCompletionSoundPersists() {
+        store.completionSoundEnabled = true
+        // 新しいインスタンスで読み直し
+        let store2 = SettingsStore(defaults: testDefaults)
+        XCTAssertTrue(store2.completionSoundEnabled)
+    }
+
+    func testCompletionSoundOnChangeFires() {
+        var changeCount = 0
+        store.onChange = { changeCount += 1 }
+
+        store.completionSoundEnabled = true
+        XCTAssertEqual(changeCount, 1)
+    }
+
+    func testResetClearsCompletionSound() {
+        store.completionSoundEnabled = true
+        store.resetForTesting()
+        XCTAssertFalse(store.completionSoundEnabled)
+    }
 }
