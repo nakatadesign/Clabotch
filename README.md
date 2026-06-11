@@ -188,6 +188,9 @@ Each entry requires a `matcher` and a `hooks` array:
 **Gaze tracking not working**  
 Open _System Settings → Privacy & Security → Accessibility_ and make sure Clabotch is listed and checked. If it appears greyed out or missing, remove the entry and re-grant permission from the onboarding dialog.
 
+**Accessibility toggle is ON, but Settings still shows "Not granted"**  
+This happens after updating Clabotch: the toggle refers to the *previous* build's code signature, so it no longer applies to the new one (the current builds are ad-hoc signed, and the signature changes on every build). Fix it by turning the Clabotch toggle **OFF and back ON**. If the status still doesn't update, quit and relaunch Clabotch; as a last resort, remove Clabotch from the list with the "−" button and re-grant. Expect to redo this after each update until notarized builds are available.
+
 **Tests failing with "address already in use"**  
 Run `pkill -9 -f Clabotch` before the test command. A running instance holds the socket.
 
