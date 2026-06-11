@@ -42,6 +42,14 @@ Events arrive via Claude Code hooks → Unix domain socket → `HookServer` → 
 
 ## Quick Start
 
+### 0. Download (or build from source)
+
+Grab the latest DMG from [**Releases**](https://github.com/nakatadesign/Clabotch/releases) and drag Clabotch.app into Applications — then jump to step 3.
+
+> The current build is ad-hoc signed (not notarized yet). If macOS blocks the first launch, go to **System Settings → Privacy & Security → "Open Anyway"**, or run `xattr -d com.apple.quarantine /Applications/Clabotch.app`.
+
+Prefer building yourself? Continue with step 1.
+
 ### 1. Build
 
 ```bash
